@@ -1,0 +1,8 @@
+import mongoose from "mongoose";
+
+const stateSchema = new mongoose.Schema({
+    name : { type : String , required : true },
+    admin_id : { type : mongoose.Schema.Types.ObjectId , required : true  , ref : "User"},
+} , { timestamps:true });
+
+export default mongoose.model("State" , stateSchema)

@@ -1,8 +1,0 @@
-import mongoose from "mongoose";
-
-const dealTypeSchema = new mongoose.Schema({
-    name : { type : String , required : true },
-    admin_id : { type : mongoose.Schema.Types.ObjectId , required : true  , ref : "User"},
-}, {timestamps : true });
-
-export default mongoose.model("DealType" , dealTypeSchema);

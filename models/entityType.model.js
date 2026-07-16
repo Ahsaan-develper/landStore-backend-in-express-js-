@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const entitySchema = new mongoose.Schema({
     name : {  type : String  , required : true },
-    admin_id : { type : mongoose.Schema.Types.ObjectId , required : true  , ref : "User"},
+    admin_id : { type : mongoose.Schema.Types.ObjectId , required : true   , ref : "User"},
 
 } , { timestamps : true})
 

@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 import { _config } from "../config/env.config.js";
 import { isTokenBlacklisted } from "../utils/tokenBlackList.js";
-import { ConflictError } from "./error.middleware.js";
+import { ConflictError, ForbiddenError } from "./error.middleware.js";
 
 // for access token 
 

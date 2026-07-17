@@ -25,7 +25,8 @@ export const register_keropasi = async (req, res) => {
             role: "koperasi",
             active: true,
             koperasi_name ,
-            koperasi_reg_number
+            koperasi_reg_number,
+             entity_type,  
         });
 
         res.status(201).json({

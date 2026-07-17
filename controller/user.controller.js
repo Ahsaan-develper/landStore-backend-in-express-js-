@@ -25,6 +25,7 @@ export const register_user = async (req, res) => {
             entity_type: entity_type || [],
             role: "individual",
             active: true,
+            entity_type,  
         });
 
         res.status(201).json({

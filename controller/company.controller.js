@@ -25,7 +25,8 @@ export const register_company = async (req, res) => {
             role: "company",
             active: true,
             company_name ,
-            SSM_registration_number
+            SSM_registration_number,
+             entity_type,  
         });
 
         res.status(201).json({

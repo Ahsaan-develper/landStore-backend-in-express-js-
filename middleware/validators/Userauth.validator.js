@@ -43,6 +43,8 @@ export const validateRegister = [
     body("entity_type")
         .optional()
         .isArray().withMessage("entity_type must be an array"),
+
+        
     body("company_name")
     .optional()
     .trim()

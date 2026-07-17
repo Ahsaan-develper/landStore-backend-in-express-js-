@@ -12,6 +12,7 @@ import { entity_router } from "./routes/entityType.routes.js";
 import { review_router } from "./routes/reviews.routes.js";
 import { country_code_router } from "./routes/countryPhoneCode.routes.js";
 import { malaysia_router } from "./routes/malaysia.routes.js";
+import { listing_router } from "./routes/listing.routes.js";
 
 const app = express();
 
@@ -26,6 +27,7 @@ app.use("/entity" , entity_router)
 app.use("/review" , review_router)
 app.use("/code", country_code_router)
 app.use("/states", malaysia_router)
+app.use("/listing" , listing_router)
 const start_server = async ( )=>{
    try {
      await connect_DB();

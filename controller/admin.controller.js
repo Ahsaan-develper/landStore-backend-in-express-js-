@@ -10,7 +10,7 @@ import { deleteFromCloudinary, upload_to_cloudinary } from "../services/cloudina
 
 export const register_admin = async (req, res) => {
     try {
-        const { fullname, email, password, phone_number, country_phone_code, IC } = req.body;
+        const { fullname, email, password, phone_number, country_phone_code, IC ,  entity_type,   } = req.body;
 
         const hashed_password = await bcrypt.hash(password, 10);
 
@@ -23,6 +23,7 @@ export const register_admin = async (req, res) => {
             IC,
             role: "admin",
             active: true,
+            entity_type,  
         });
 
         res.status(201).json({

@@ -1,0 +1,50 @@
+import { Router } from "express";
+import { change_listing_status, create_listing, get_active_listings, get_all_listings_by_admin, get_draft_listings, get_inactive_listings, get_listing_by_radius, get_listing_by_user, get_pending_listings, get_single_listing, get_under_review_listings, make_draft_by_user, search_listings, update_listing } from "../controller/listing.controller.js";
+import { authorize, verify_token } from "../middleware/jwt.middleware.js";
+import { upload_listing_to_multer } from "../middleware/multer.middleware.js";
+import { change_listing_status_admin_validator, listing_id_validator, listing_page_validator, listing_radius_validator, update_listing_validator } from "../middleware/validators/listing.validator.js";
+import { HandleValidationError } from "../middleware/validators/handleValidationError.js";
+
+export const listing_router = Router();
+
+// create listing 
+listing_router.post("/" , verify_token ,authorize("individual" , "company" , "keporasi") , upload_listing_to_multer, create_listing);
+
+
+// make an draft 
+
+listing_router.post("/draft" , verify_token ,authorize("individual" , "company" , "keporasi") , upload_listing_to_multer , make_draft_by_user)
+
+// get all user listings
+listing_router.get("/user_listing" , verify_token , listing_page_validator , HandleValidationError, get_listing_by_user )
+
+// get all draft 
+listing_router.get("/all_draft" , verify_token,authorize("individual" , "company" , "keporasi") , listing_page_validator , HandleValidationError, get_draft_listings )
+
+// get all under review 
+listing_router.get("/all_under_review" , verify_token,authorize("individual" , "company" , "keporasi") , listing_page_validator , HandleValidationError, get_under_review_listings )
+
+// all active listings 
+listing_router.get("/all_active" , verify_token , authorize("individual" , "company" , "keporasi") , listing_page_validator , HandleValidationError , get_active_listings)
+
+// get all in active listingss 
+listing_router.get("/all_inactive" , verify_token , authorize("individual" , "company" , "keporasi") , listing_page_validator , HandleValidationError , get_inactive_listings)
+// get all pending listings
+listing_router.get("/all_pending" , verify_token , authorize("individual" , "company" , "keporasi") , listing_page_validator , HandleValidationError , get_pending_listings)
+
+// get all listings by admin
+listing_router.get("/all" , verify_token  , listing_page_validator , HandleValidationError , get_all_listings_by_admin)
+
+// change status by admin
+listing_router.patch("/status_admin" , verify_token  , authorize("super_admin" , "listing_admin"), change_listing_status_admin_validator , HandleValidationError , change_listing_status)
+
+// apply filters 
+listing_router.get("/search" , search_listings)
+
+listing_router.get("/zoom_out" , listing_radius_validator , HandleValidationError, get_listing_by_radius)
+
+// get single listing by id 
+
+listing_router.get("/single/:id" , listing_id_validator , HandleValidationError , get_single_listing)
+// update an listing 
+listing_router.patch("/:id" , verify_token  ,authorize("individual" , "company" , "keporasi") , listing_id_validator , update_listing_validator , HandleValidationError , upload_listing_to_multer , update_listing )

@@ -50,3 +50,15 @@ export const upload_listing = listingMulter.fields([
         maxCount: 11
     }
 ]);
+
+
+
+const messageMulter = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 50 * 1024 * 1024 
+    }
+});
+
+
+export const upload_message_files = messageMulter.array("files", 11);

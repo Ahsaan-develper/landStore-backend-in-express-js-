@@ -9,6 +9,9 @@ import { admin_router } from "./routes/admin.routes.js";
 import { trackVisitor } from "./middleware/trackvisitor.middleware.js";
 import { listing_router } from "./routes/listing.routes.js";
 import { folder_router } from "./routes/folder.routes.js";
+import { enquiry_router } from "./routes/enquiry.routes.js";
+import { message_router } from "./routes/message.routes.js";
+import { schedule_router } from "./routes/schedule.routes.js";
 
 const app = express();
 app.use(errorHandler)
@@ -20,6 +23,9 @@ app.use("/auth"  , auth_router);
 app.use("/admin"  , admin_router);
 app.use("/listing"  , listing_router);
 app.use("/folder"  , folder_router);
+app.use("/enquiry"  , enquiry_router);
+app.use("/message"  , message_router);
+app.use("/schedule"  , schedule_router);
 const start_server = async( )=>{
     try {
         await connect_DB()

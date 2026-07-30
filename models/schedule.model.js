@@ -5,7 +5,11 @@ const scheduleSchema = new mongoose.Schema({
   visit_date: { type : Date , required : true},
   scheduled_date_time: { type : Date , required : true},
   visit_address: { type : String , required : true},
-  status: { type: String, enum: ["pending", "rejected", "completed"] },
+  status: {
+        type: String,
+        enum: ["scheduled", "completed", "cancelled"],
+        default: "scheduled"
+    },
   notes:{ type : String , required : true},
 }, { timestamps: true });
 

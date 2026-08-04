@@ -28,7 +28,7 @@ export const create_enquiry_validator = [
 
 export const change_enquiry_status_validator = [
 
-    body("enquiry_id")
+    param("enquiry_id")
         .trim()
         .notEmpty().withMessage("Enquiry id is required")
         .bail()
@@ -52,7 +52,7 @@ export const change_enquiry_status_validator = [
 
 export const change_enquiry_status_by_user_validator = [
 
-    body("enquiry_id")
+    param("enquiry_id")
         .trim()
         .notEmpty().withMessage("Enquiry id is required")
         .bail()

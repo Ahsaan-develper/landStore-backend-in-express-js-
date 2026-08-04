@@ -1,4 +1,4 @@
-import { param , body } from "express-validator";
+import { param , body, query } from "express-validator";
 
 export const create_folder_validator= [
     body("name")
@@ -14,10 +14,15 @@ export const folder_id_validator= [
 ]
 
 export const folder_page_validator= [
-    body("page")
+    query("page")
     .optional()
     .trim()
-    .notEmpty().withMessage("Please enter name of folder")
+    .notEmpty().withMessage("Please enter page number")
+    .isInt().withMessage(" Please enter number "),
+    query("limit")
+    .optional()
+    .trim()
+    .notEmpty().withMessage("Please enter limit number")
     .isInt().withMessage(" Please enter number ")
 ]
 

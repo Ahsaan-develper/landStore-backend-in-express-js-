@@ -1,4 +1,4 @@
-import { param , body } from "express-validator";
+import { param , body  , query} from "express-validator";
 
 
 export const sub_admin_validator = [
@@ -22,7 +22,7 @@ export const admin_status_validator = [
 
 
 export const admin_change_role_validator = [
-    body("admin_id")
+    param("admin_id")
     .trim()
     .notEmpty().withMessage(" Please enter admin_id  ").bail()
     .isMongoId().withMessage("Id format not correct "),
@@ -30,12 +30,18 @@ export const admin_change_role_validator = [
     body("role")
     .trim()
     .notEmpty().withMessage("Please enter role").bail()
-    .isIn(["listing_admin" , "enquiry_admin" , "user_admin"]).withMessage("Status must be active , inactive , suspended")
+    .isIn(["listing_admin" , "enquiry_admin" , "user_admin"]).withMessage("Role must be listing_admin , enquiry_admin , user_admin")
 ]
 
 export const page_admin_validator = [
-    body("page")
+    query("page")
+    .optional()
+    .trim()
+    .notEmpty().withMessage(" Please enter page number "),
+
+    query("limit")
     .optional()
     .trim()
     .notEmpty().withMessage(" Please enter page number ")
 ]
+

@@ -22,7 +22,7 @@ export const make_schedule_validator = [
 
 
 export const status_schedule_validator = [
-    body("schedule_id")
+    param("schedule_id")
     .trim()
     .notEmpty().withMessage("Please enter schedule_id").bail()
     .isMongoId().withMessage("Schedule id format is not correct"),
@@ -35,10 +35,9 @@ export const status_schedule_validator = [
 
 
 export const get_schedule_validator = [
-    param("enquiry_id")
+    param("schedule_id")
     .trim()
-    .notEmpty().withMessage("Please enter enquiry_id").bail()
-    .isMongoId().withMessage("Enquiry id format is not correct"),
+    .notEmpty().withMessage("Please enter schedule_id").bail()
+    .isMongoId().withMessage("Schedule id format is not correct"),
 
-   
 ]

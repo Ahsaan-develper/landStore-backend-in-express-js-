@@ -10,6 +10,9 @@ import { user_code_generator } from "../utils/unique_code_generator.utils.js";
 import bcrypt from "bcrypt";
 import companyDetailsModel from "../models/companyDetails.model.js";
 import mongoose from "mongoose";
+import { linkVisitorToUser } from "../utils/make_visitor_user.js";
+
+
 export const user_register = async (req, res, next) => {
     try {
         const { fullname, email, password, phone_number, IC } = req.body;
@@ -35,22 +38,53 @@ export const user_register = async (req, res, next) => {
             Promise.resolve(new mongoose.Types.ObjectId()) 
         ]);
 
-        const [user] = await Promise.all([
-            usersModel.create({
-                _id: user_id,       
-                fullname,
-                email,
-                password: hashed_password,
-                status: "active",
-                role: "individual",
-                user_code
-            }),
-            userDetailModel.create({
-                user_id,            
-                phone_number,
-                IC
-            })
-        ]);
+       const session = await mongoose.startSession();
+
+try {
+
+    session.startTransaction();
+
+    const user = await usersModel.create(
+        [{
+            _id: user_id,
+            fullname,
+            email,
+            password: hashed_password,
+            status: "active",
+            role: "individual",
+            user_code
+        }],
+        { session }
+    );
+
+    await userDetailModel.create(
+        [{
+            user_id,
+            phone_number,
+            IC
+        }],
+        { session }
+    );
+
+    await session.commitTransaction();
+
+    await linkVisitorToUser(req, user[0]._id);
+
+    return res.status(201).json({
+        data: user[0]
+    });
+
+} catch (err) {
+
+    await session.abortTransaction();
+    throw err;
+
+} finally {
+
+    session.endSession();
+
+}
+        await  linkVisitorToUser(req , user._id)
 
         return res.status(201).json({
             data: {
@@ -72,7 +106,7 @@ export const user_register = async (req, res, next) => {
 export const keporasi_register = async ( req , res , next )=>{
     try{
         
-        const { fullname, email, password, phone_number, IC , keporasi_name , keporasi_reg_number} = req.body;
+        const { fullname, email, password, phone_number , keporasi_name , keporasi_reg_number} = req.body;
         const existing_user = await usersModel.findOne({ email }).select("_id status").lean();
         if ( existing_user ){
             if( existing_user.status === "active") throw new ConflictError(" User already register with this email ");
@@ -106,9 +140,10 @@ export const keporasi_register = async ( req , res , next )=>{
              userDetailModel.create({
                 user_id,
                 phone_number,
-                IC
             })
         ]);
+                await  linkVisitorToUser(req , user._id)
+
 
         return res.status(201).json({
             data: {
@@ -133,7 +168,7 @@ export const company_register = async ( req , res , next )=>{
     try{
        
         
-        const { fullname, email, password, phone_number, IC , company_name , SSM_reg_number} = req.body;
+        const { fullname, email, password, phone_number , company_name , SSM_reg_number} = req.body;
         const existing_user = await usersModel.findOne({ email }).select("_id status").lean();
         if ( existing_user ){
             if( existing_user.status === "active") throw new ConflictError(" User already register with this email ");
@@ -167,9 +202,9 @@ export const company_register = async ( req , res , next )=>{
              userDetailModel.create({
                 user_id,
                 phone_number,
-                IC
             })
         ]);
+                await  linkVisitorToUser(req , user._id)
 
         return res.status(201).json({
             data: {
@@ -190,8 +225,10 @@ export const company_register = async ( req , res , next )=>{
 export const user_login = async ( req , res , next )=>{
     try {
         const { email , password } = req.body;
-        const user = await usersModel.findOne({ email }).select("_id fullname email password role is_verify").lean();
+        const user = await usersModel.findOne({ email }).select("_id fullname email password status role is_verify").lean();
         if ( !user ) throw new UnauthorizedError("Email is incorrect ");
+          if (user.status !== "active")
+            throw new UnauthorizedError("Your account is currently inactive. Please contact support.");
         if ( !user.is_verify ) throw new UnauthorizedError("Please verify your email ");
         const is_match = await bcrypt.compare(password , user.password);
         if ( !is_match ) throw new UnauthorizedError("Password is incorrect ");
@@ -211,6 +248,8 @@ export const user_login = async ( req , res , next )=>{
             { $set: { refresh_token } },
             { new: true }
         );
+                await  linkVisitorToUser(req , user._id)
+
         res.status(200).json({
             data : {
                 message: "User is login ",
@@ -229,6 +268,7 @@ export const user_login = async ( req , res , next )=>{
 export const verify_user_email = async ( req , res  , next)=>{
     try {
         const { user_id } = req.params;
+        console.log(user_id)
         const user = await usersModel.findByIdAndUpdate( user_id, {$set : { is_verify : true }} , { new : true }  )
         if ( !user ) throw new NotFoundError(" User not found ");
         res.status(200).json({

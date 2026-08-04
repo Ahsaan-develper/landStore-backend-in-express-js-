@@ -8,6 +8,8 @@ import { ConflictError, ForbiddenError, NotFoundError, UnauthorizedError } from 
 import userDetailModel from "../models/userDetail.model.js";
 import companyDetailsModel from "../models/companyDetails.model.js";
 import keporasiDetailModel from "../models/keporasiDetail.model.js";
+import { NotificationTemplates } from "../template/notification.template.js";
+import { createNotification } from "../services/notification.service.js";
 export const super_admin_register = async (req, res, next) => {
     try {
         const { fullname, email, password } = req.body;
@@ -206,7 +208,7 @@ export const sub_admin_register = async (req, res, next) => {
 // get user profile data
 export const get_user_by_admin_profile = async (req, res, next) => {
     try {
-        const { user_id } = req.body;
+        const { user_id } = req.params;
 
         const user = await usersModel
             .findById(user_id)
@@ -215,8 +217,6 @@ export const get_user_by_admin_profile = async (req, res, next) => {
             .lean();
 
         if (!user)                    throw new NotFoundError("User not found");
-        if (!user.is_verify)          throw new UnauthorizedError("User email is not verified");
-        if (user.status !== "active") throw new UnauthorizedError("User account is inactive or suspended");
 
         const is_admin = ["super_admin", "admin", "moderator"].includes(user.role);
 
@@ -272,8 +272,9 @@ export const get_user_by_admin_profile = async (req, res, next) => {
 // get all users
 export const get_all_users = async (req, res, next) => {
     try {
-        const { page = 1 } = req.body;
-        const limit = 10;
+        const page = Math.max(Number(req.query.page) || 1 , 1 )
+        const limit =  Math.max(Number(req.query.limit) ||  10 , 1)
+    
         const skip = (parseInt(page) - 1) * limit;
 
         const currentPage = Math.max(1, parseInt(page, 10) || 1);
@@ -351,32 +352,61 @@ export const get_all_users = async (req, res, next) => {
 // change user status
 export const change_user_status_by_admin = async (req, res, next) => {
     try {
+
         const { user_id, status } = req.body;
 
-        // logged-in admin
         const currentAdmin = req.user.role;
 
-        const admin = await adminModel.findOne({ user_id }).select("_id role ").lean();
-        if (admin && currentAdmin === "super_admin"){
-            if ( currentAdmin !== "super_admin") throw new ForbiddenError(" Only super admin can suspend other admin")
-        }
-    const user = await usersModel.findByIdAndUpdate(
-    user_id,
-    { $set: { status } },
-    { new: true }
-);
+        const admin = await adminModel
+            .findOne({ user_id })
+            .select("_id role")
+            .lean();
 
-if (!user) {
-    throw new NotFoundError("User not found");
-}
-        res.status(200).json({
-            message: "User status changed successfully",
+        // Only super admin can suspend another admin
+        if (admin && currentAdmin !== "super_admin") {
+            throw new ForbiddenError(
+                "Only super admin can change another admin's status."
+            );
+        }
+
+        const user = await usersModel.findByIdAndUpdate(
+            user_id,
+            { $set: { status } },
+            { new: true }
+        ).select("_id fullname email status");
+
+        if (!user) {
+            throw new NotFoundError("User not found.");
+        }
+
+        // ---------------- Notification ----------------
+
+        let template;
+
+        if (status === "suspended") {
+            template = NotificationTemplates.accountSuspended();
+        } else if (status === "active") {
+            template = NotificationTemplates.accountActivated();
+        }
+
+        if (template) {
+            await createNotification({
+                user_id: user._id,
+                notifiable_type: "Account",
+                title: template.title,
+                message: template.message
+            });
+        }
+
+        return res.status(200).json({
+            message: "User status changed successfully.",
             user: {
                 fullname: user.fullname,
                 email: user.email,
-                status: user.status,
-            },
+                status: user.status
+            }
         });
+
     } catch (err) {
         next(err);
     }
@@ -386,7 +416,8 @@ if (!user) {
 export const change_admin_role_by_super_admin = async ( req , res , next )=>{
     try {
         
-        const { admin_id , role} = req.body ;
+        const {role} = req.body ;
+        const {admin_id} = req.params;
         const current_admin = req.user.role;
         const admin = await adminModel.findById(admin_id).select(" role ").lean();
         if ( !admin ) throw new NotFoundError("Admin not found ");
@@ -408,8 +439,8 @@ export const change_admin_role_by_super_admin = async ( req , res , next )=>{
 // get all admins
 export const get_all_admins = async (req, res, next) => {
     try {
-        const page = parseInt(req.query.page) || 1;
-        const limit = 10;
+        const page = Math.max(Number(req.query.page) || 1, 1);
+        const limit = Math.max(Number(req.query.limit) || 10, 1);
         const skip = (page - 1) * limit;
 
         const result = await adminModel.aggregate([

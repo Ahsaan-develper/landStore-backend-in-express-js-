@@ -1,4 +1,4 @@
-import { param , body } from "express-validator";
+import { param , query, body } from "express-validator";
 
 
 export const create_listing_validator = [
@@ -23,17 +23,17 @@ export const create_listing_validator = [
         .notEmpty().withMessage("Malay reserve status is required").bail()
         .isIn(["true", "false", true, false]).withMessage("Must be true or false"),
 
-    body("sub_district")
+    body("sub_district_name")
         .notEmpty().withMessage("Sub-district is required").bail()
         .trim()
         .isLength({ min: 2 }).withMessage("Sub-district too short"),
 
-    body("district")
+    body("district_name")
         .notEmpty().withMessage("District is required").bail()
         .trim()
         .isLength({ min: 2 }).withMessage("District too short"),
 
-    body("section")
+    body("session")
         .notEmpty().withMessage("Section is required"),
 
     body("lot_number")
@@ -63,7 +63,7 @@ export const create_listing_validator = [
         .notEmpty().withMessage("Deal type is required")
         .custom((value) => {
             const arr = Array.isArray(value) ? value : [value];
-            const valid = ["buy", "financing","JV"];
+            const valid = ["buy", "financing","jv"];
             const invalid = arr.filter(v => !valid.includes(v));
             if (invalid.length > 0) throw new Error(`Invalid deal types: ${invalid.join(", ")}`);
             return true;
@@ -73,7 +73,7 @@ export const create_listing_validator = [
         .notEmpty().withMessage("Category is required").bail()
         .isIn(["commercial", "industrial", "residential"]).withMessage("Invalid category"),
 
-    body("state")
+    body("state_name")
         .notEmpty().withMessage("State is required")
         .trim(),
 
@@ -118,12 +118,23 @@ export const create_listing_validator = [
 ];
 
 
+
+
 export const listing_radius_validator = [
-    body("radius")
-    .optional()
-    .trim()
-    .isInt().withMessage("Radius must be a number")
-]
+
+    query("latitude")
+        .notEmpty().withMessage("Latitude is required.").bail()
+        .isFloat({ min: -90, max: 90 }).withMessage("Latitude must be between -90 and 90."),
+
+    query("longitude")
+        .notEmpty().withMessage("Longitude is required.").bail()
+        .isFloat({ min: -180, max: 180 }).withMessage("Longitude must be between -180 and 180."),
+
+    query("radius")
+        .optional()
+        .isFloat({ min: 1 }).withMessage("Radius must be a positive number."),
+
+];
 
 
 
@@ -139,6 +150,8 @@ export const listing_id_validator = [
     .notEmpty().withMessage(" Listing id is required ")
     .isMongoId().withMessage(" Your id format is not correct ")
 ]
+
+
 
 
 export const update_listing_validator = [
@@ -168,19 +181,19 @@ export const update_listing_validator = [
         .notEmpty().withMessage("Malay reserve status is required").bail()
         .isIn(["true", "false", true, false]).withMessage("Must be true or false"),
 
-    body("sub_district")
+    body("sub_district_name")
     .optional()
         .notEmpty().withMessage("Sub-district is required").bail()
         .trim()
         .isLength({ min: 2 }).withMessage("Sub-district too short"),
 
-    body("district")
+    body("district_name")
     .optional()
         .notEmpty().withMessage("District is required").bail()
         .trim()
         .isLength({ min: 2 }).withMessage("District too short"),
 
-    body("section")
+    body("session")
     .optional()
         .notEmpty().withMessage("Section is required"),
 
@@ -214,7 +227,7 @@ export const update_listing_validator = [
         .notEmpty().withMessage("Deal type is required")
         .custom((value) => {
             const arr = Array.isArray(value) ? value : [value];
-            const valid = ["buy", "financing","JV"];
+            const valid = ["buy", "financing","jv"];
             const invalid = arr.filter(v => !valid.includes(v));
             if (invalid.length > 0) throw new Error(`Invalid deal types: ${invalid.join(", ")}`);
             return true;
@@ -225,7 +238,7 @@ export const update_listing_validator = [
         .notEmpty().withMessage("Category is required").bail()
         .isIn(["commercial", "industrial", "residential"]).withMessage("Invalid category"),
 
-    body("state")
+    body("state_name")
     .optional()
         .notEmpty().withMessage("State is required")
         .trim(),

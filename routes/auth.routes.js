@@ -24,7 +24,7 @@ auth_router.post("/company", user_register_validator  , company_register_validat
 
 // user login 
 
-auth_router.get("/" , user_login_validator , HandleValidationError , user_login);
+auth_router.post("/login" , user_login_validator , HandleValidationError , user_login);
 
 // user profile 
 
@@ -33,12 +33,10 @@ auth_router.get("/profile"  , verify_token , get_user_profile);
 
 // verify user 
 
-auth_router.patch("/verify/:user_id"  , user_id_validator , HandleValidationError , verify_user_email)
+auth_router.post("/verify/:user_id"  , user_id_validator , HandleValidationError , verify_user_email)
 
 // user logout 
-auth_router.patch("/logout" , verify_token, logout);
-
-
+auth_router.post("/logout" , verify_token, logout);
 
 // update user 
 

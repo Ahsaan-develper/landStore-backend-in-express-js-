@@ -3,7 +3,7 @@ import enquiryModel from "../models/enquiry.model.js";
 import mediaModel from "../models/media.model.js";
 import mongoose from "mongoose";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../utils/error.utils.js";
-import { upload_files_to_cloudinary } from "../services/cloudinary.service.js";
+import { get_media_type, upload_files_to_cloudinary } from "../services/cloudinary.service.js";
 export const send_message = async (req, res, next) => {
     try {
 
@@ -94,12 +94,14 @@ export const send_message = async (req, res, next) => {
 
 
 // get all one enquiry messages
-
-
 export const get_enquiry_messages = async (req, res, next) => {
     try {
 
         const { enquiry_id } = req.params;
+
+        const page = Math.max(Number(req.query.page) || 1, 1);
+        const limit = Math.max(Number(req.query.limit) || 10, 1);
+        const skip = (page - 1) * limit;
 
         const user_id = req.user.sub;
         const role = req.user.role;
@@ -110,7 +112,6 @@ export const get_enquiry_messages = async (req, res, next) => {
             throw new NotFoundError("Enquiry not found.");
         }
 
-        // Allow only enquiry owner or admins
         if (
             role !== "super_admin" &&
             role !== "enquiry_admin" &&
@@ -119,11 +120,9 @@ export const get_enquiry_messages = async (req, res, next) => {
             throw new ForbiddenError("You are not allowed to view this enquiry.");
         }
 
-        // ---------------- MARK AS READ ----------------
-
+        // Mark messages as read
         if (role === "super_admin" || role === "enquiry_admin") {
 
-            // Admin reads enquiry messages
             await messageModel.updateMany(
                 {
                     enquiry_id: enquiry._id,
@@ -140,7 +139,6 @@ export const get_enquiry_messages = async (req, res, next) => {
 
         } else {
 
-            // Enquiry reads admin messages
             await messageModel.updateMany(
                 {
                     enquiry_id: enquiry._id,
@@ -157,7 +155,9 @@ export const get_enquiry_messages = async (req, res, next) => {
 
         }
 
-        // ---------------- FETCH MESSAGES ----------------
+        const totalMessages = await messageModel.countDocuments({
+            enquiry_id: enquiry._id
+        });
 
         const messages = await messageModel.aggregate([
 
@@ -165,6 +165,20 @@ export const get_enquiry_messages = async (req, res, next) => {
                 $match: {
                     enquiry_id: enquiry._id
                 }
+            },
+
+            {
+                $sort: {
+                    createdAt: -1
+                }
+            },
+
+            {
+                $skip: skip
+            },
+
+            {
+                $limit: limit
             },
 
             {
@@ -231,20 +245,28 @@ export const get_enquiry_messages = async (req, res, next) => {
                     }
 
                 }
-            },
 
-            {
-                $sort: {
-                    createdAt: 1
-                }
             }
 
         ]);
 
+        // Reverse so UI shows oldest -> newest within the page
+        messages.reverse();
+
         return res.status(200).json({
+
             enquiry_id,
-            total_messages: messages.length,
+
+            page,
+
+            totalMessages,
+
+            totalPages: Math.ceil(totalMessages / limit),
+
+            hasMore: page * limit < totalMessages,
+
             messages
+
         });
 
     } catch (err) {

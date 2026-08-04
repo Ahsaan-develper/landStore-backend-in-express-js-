@@ -1,6 +1,6 @@
 import jwt, { decode } from "jsonwebtoken"
 import { _config } from "../config/envConfig.js";
-import { ForbiddenError, InternalServerError, NotFoundError } from "../utils/error.utils.js";
+import { ForbiddenError, InternalServerError, NotFoundError, UnauthorizedError } from "../utils/error.utils.js";
 import usersModel from "../models/users.model.js";
 import { is_blackList } from "../utils/logout.utils.js";
 
@@ -31,14 +31,13 @@ if (authHeader && authHeader.startsWith("Bearer ")) {
 
 
     if (!token) {
-        throw new NotFoundError("Token not given ")
-    }
+return next(new UnauthorizedError("User Logout, please login again"));    }
     try {
         const decoded = jwt.verify(token, _config.ACCESS_TOKEN);
         const blacklisted = await is_blackList(token);
-        if (blacklisted) throw new ForbiddenError("Token is invalidated, please login again");
+        if (blacklisted) return next(new ForbiddenError("Token is invalidated, please login again"));
         const user = await usersModel.findById(decoded.sub).select("status").lean();
-        if ( !user || user.status === "inactive" ) throw new ForbiddenError(" User is not login")
+        if ( !user || user.status === "inactive" ) return next(new ForbiddenError(" User is not login"))
         req.user =  decoded;
         next();
 
@@ -103,7 +102,7 @@ export const authorize = (...allowedRoles) => {
         
 
         if (!allowedRoles.includes(req.user.role)) {
-            throw new ForbiddenError("Access denied");
+            return next(new ForbiddenError("Access denied"));
         }
         next();
     };
@@ -113,7 +112,6 @@ export const authorize = (...allowedRoles) => {
 
 export const optionalAuth = async (req, res, next) => {
     const token = req.headers.authorization?.split(" ")[1] || req.cookies?.access_token;
-   
     
     req.user = null;
     
@@ -122,7 +120,7 @@ export const optionalAuth = async (req, res, next) => {
             const decoded = jwt.verify(token, _config.ACCESS_TOKEN);
             req.user = decoded;
         } catch (err) {
-            throw new InternalServerError( err );
+            next ( err );
         }
     }
     

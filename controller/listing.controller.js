@@ -12,7 +12,9 @@ import { listing_code_generator } from "../utils/unique_code_generator.utils.js"
 import districtModel from "../models/district.model.js";
 import subDistrictModel from "../models/subDistrict.model.js";
 import locationModel from "../models/location.model.js";
-import {delete_files_from_cloudinary, upload_files_to_cloudinary} from "../services/cloudinary.service.js"
+import {delete_file, delete_files_from_cloudinary, upload_files_to_cloudinary} from "../services/cloudinary.service.js"
+import { NotificationTemplates } from "../template/notification.template.js";
+import { createNotification } from "../services/notification.service.js";
 
 
 export const create_listing = async (req, res, next) => {
@@ -132,6 +134,26 @@ export const create_listing = async (req, res, next) => {
             utilization     ,
         });
 
+        const { title , message} =NotificationTemplates.listingSubmitted({
+            listingCode : listing.listing_code,
+            state : state_doc.state,
+            district : district_doc.district,
+            status : "pending"
+        })
+        await createNotification({
+
+    user_id: listing.user_id,
+
+    listing_id: listing._id,
+
+    notifiable_type: "Listing",
+
+    title,
+
+    message
+
+});
+
         return res.status(201).json({
             data: {
                 _id          : listing._id,
@@ -146,8 +168,12 @@ export const create_listing = async (req, res, next) => {
     }
 };
 
-// change listing status from pending to draft 
+// change listing status from pending to draft
+
+
 export const make_draft_by_user = async (req, res, next) => {
+    const dbSession = await mongoose.startSession();
+
     try {
         const {
             unit,
@@ -184,13 +210,13 @@ export const make_draft_by_user = async (req, res, next) => {
             );
         }
 
-        // Upload property images
+        // Upload property images (outside transaction — no DB lock needed)
         const image_uploads = await upload_files_to_cloudinary(
             property_images,
             "listings/images"
         );
 
-        // Upload geran only if provided
+        // Upload geran only if provided (outside transaction)
         let doc_uploads = [];
         if (geran_docs.length > 0) {
             doc_uploads = await upload_files_to_cloudinary(
@@ -199,35 +225,39 @@ export const make_draft_by_user = async (req, res, next) => {
             );
         }
 
-        // Create location hierarchy
-        const state_doc = await stateModel.create({
-            state: state_name,
-        });
+        // Generate listing code outside transaction — no lock needed
+        const listing_code = await listing_code_generator();
 
-        const district_doc = await districtModel.create({
-            state_id: state_doc._id,
-            district: district_name,
-        });
+        const deal_types = Array.isArray(dealType) ? dealType : [dealType];
+        const tags = Array.isArray(feature_tags) ? feature_tags : [feature_tags];
+        const terrain_list = Array.isArray(terrain) ? terrain : [terrain];
 
-        const sub_district_doc = await subDistrictModel.create({
-            district_id: district_doc._id,
-            sub_district: sub_district_name,
-            session,
-        });
+        // ── Start transaction only for DB writes ──────────────────────────
+        dbSession.startTransaction();
 
-        const deal_types = Array.isArray(dealType)
-            ? dealType
-            : [dealType];
+        // Create location hierarchy (sequential — each depends on prior _id)
+        const state_doc = await stateModel.create(
+            [{ state: state_name }],
+            { session: dbSession }
+        );
 
-        const tags = Array.isArray(feature_tags)
-            ? feature_tags
-            : [feature_tags];
+        const district_doc = await districtModel.create(
+            [{ state_id: state_doc[0]._id, district: district_name }],
+            { session: dbSession }
+        );
 
-        const terrain_list = Array.isArray(terrain)
-            ? terrain
-            : [terrain];
+        await subDistrictModel.create(
+            [
+                {
+                    district_id: district_doc[0]._id,
+                    sub_district: sub_district_name,
+                    session,
+                },
+            ],
+            { session: dbSession }
+        );
 
-        // Create related documents
+        // Create all independent documents in parallel
         const [
             media_doc,
             deal_type_doc,
@@ -235,113 +265,154 @@ export const make_draft_by_user = async (req, res, next) => {
             terrain_doc,
             location_doc,
             leasehold_doc,
-            listing_code,
         ] = await Promise.all([
-
-            mediaModel.create({
-                media_url: [
-                    ...image_uploads.map(file => file.url),
-                    ...doc_uploads.map(file => file.url),
+            mediaModel.create(
+                [
+                    {
+                        media_url: [
+                            ...image_uploads.map((file) => file.url),
+                            ...doc_uploads.map((file) => file.url),
+                        ],
+                        public_id: [
+                            ...image_uploads.map((file) => file.public_id),
+                            ...doc_uploads.map((file) => file.public_id),
+                        ],
+                        media_type: [
+                            ...image_uploads.map(() => "image"),
+                            ...doc_uploads.map(() => "geran"),
+                        ],
+                        media_name: [
+                            ...property_images.map((file) => file.originalname),
+                            ...geran_docs.map((file) => file.originalname),
+                        ],
+                    },
                 ],
+                { session: dbSession }
+            ),
 
-                public_id: [
-                    ...image_uploads.map(file => file.public_id),
-                    ...doc_uploads.map(file => file.public_id),
+            dealTypeModel.create(
+                [{ name: deal_types }],
+                { session: dbSession }
+            ),
+
+            featureTagModel.create(
+                [{ tag: tags }],
+                { session: dbSession }
+            ),
+
+            terrainTypeModel.create(
+                [{ name: terrain_list }],
+                { session: dbSession }
+            ),
+
+            locationModel.create(
+                [
+                    {
+                        location: {
+                            type: "Point",
+                            coordinates: [
+                                parseFloat(longitude),
+                                parseFloat(latitude),
+                            ],
+                        },
+                    },
                 ],
-
-                media_type: [
-                    ...image_uploads.map(() => "image"),
-                    ...doc_uploads.map(() => "geran"),
-                ],
-
-                media_name: [
-                    ...property_images.map(file => file.originalname),
-                    ...geran_docs.map(file => file.originalname),
-                ],
-            }),
-
-            dealTypeModel.create({
-                name: deal_types,
-            }),
-
-            featureTagModel.create({
-                tag: tags,
-            }),
-
-            terrainTypeModel.create({
-                name: terrain_list,
-            }),
-
-            locationModel.create({
-                location: {
-                    type: "Point",
-                    coordinates: [
-                        parseFloat(longitude),
-                        parseFloat(latitude),
-                    ],
-                },
-            }),
+                { session: dbSession }
+            ),
 
             tenure_type === "leasehold"
-                ? leaseholdDetailModel.create({
-                      start_date,
-                      end_year,
-                  })
-                : null,
-
-            listing_code_generator(),
+                ? leaseholdDetailModel.create(
+                      [{ start_date, end_year }],
+                      { session: dbSession }
+                  )
+                : Promise.resolve([null]),
         ]);
 
-        const tenure_doc = await tenureTypeModel.create({
-            type: tenure_type,
-            leasehold_id: leasehold_doc?._id || null,
-        });
+        const tenure_doc = await tenureTypeModel.create(
+            [
+                {
+                    type: tenure_type,
+                    leasehold_id: leasehold_doc?.[0]?._id || null,
+                },
+            ],
+            { session: dbSession }
+        );
 
         // Create Draft Listing
-        const listing = await listingModel.create({
-            user_id,
-            tenure_id: tenure_doc._id,
-            location_id: location_doc._id,
-            state_id: state_doc._id,
-            media_id: [media_doc._id],
-            deal_type_id: [deal_type_doc._id],
-            feature_tags_id: [feature_tag_doc._id],
-            terrain_id: [terrain_doc._id],
+        const listing = await listingModel.create(
+            [
+                {
+                    user_id,
+                    tenure_id: tenure_doc[0]._id,
+                    location_id: location_doc[0]._id,
+                    state_id: state_doc[0]._id,
+                    media_id: [media_doc[0]._id],
+                    deal_type_id: [deal_type_doc[0]._id],
+                    feature_tags_id: [feature_tag_doc[0]._id],
+                    terrain_id: [terrain_doc[0]._id],
 
-            status: "draft",
+                    status: "draft",
 
-            listing_code,
+                    listing_code,
 
-            public_description,
+                    public_description,
 
-            is_malay_reserve_land:
-                is_malay_reserve_land === true ||
-                is_malay_reserve_land === "true",
+                    is_malay_reserve_land:
+                        is_malay_reserve_land === true ||
+                        is_malay_reserve_land === "true",
 
-            unit,
-            area: Number(area),
-            price_sqft: Number(price_sqft),
+                    unit,
+                    area: Number(area),
+                    price_sqft: Number(price_sqft),
 
-            category,
-            relation,
-            utilization,
+                    category,
+                    relation,
+                    utilization,
+                },
+            ],
+            { session: dbSession }
+        );
+
+        await dbSession.commitTransaction();
+        // ── Transaction closed ─────────────────────────────────────────────
+
+        // Notification after commit — failure here won't roll back the listing
+        const { title, message } = NotificationTemplates.listingDraftSaved({
+            listingCode: listing[0].listing_code,
+            state: state_doc[0].state,
+            district: district_doc[0].district,
+            status: "pending",
+        });
+
+        await createNotification({
+            user_id: listing[0].user_id,
+            listing_id: listing[0]._id,
+            notifiable_type: "Listing",
+            title,
+            message,
         });
 
         return res.status(201).json({
             success: true,
             message: "Draft saved successfully.",
             data: {
-                _id: listing._id,
-                listing_code: listing.listing_code,
-                status: listing.status,
+                _id: listing[0]._id,
+                listing_code: listing[0].listing_code,
+                status: listing[0].status,
             },
         });
 
     } catch (err) {
+        if (dbSession.inTransaction()) {
+            await dbSession.abortTransaction();
+        }
         console.error(err);
         next(err);
+    } finally {
+        dbSession.endSession();
     }
 };
+
 
 
 export const get_listing_by_user = async (req, res, next) => {
@@ -783,6 +854,24 @@ if (new_images.length || new_docs.length) {
             { $set: updates },
             { new: true }
         );
+
+        const { title , message} =NotificationTemplates.listingUpdated({
+            listingCode : updated.listing_code,
+            status : "pending"
+        })
+        await createNotification({
+
+    user_id : updated.user_id,
+
+    listing_id: updated._id,
+
+    notifiable_type: "Listing",
+
+    title,
+
+    message
+
+});
 
         return res.status(200).json({
             data: {
@@ -1340,6 +1429,24 @@ export const change_listing_status = async (req, res, next) => {
             throw new NotFoundError("Listing not found.");
         }
 
+        const { title , message} =NotificationTemplates.listingStatusChanged({
+            listingCode : listing.listing_code,
+            status 
+        })
+        await createNotification({
+
+    user_id: listing.user_id,
+
+    listing_id: listing._id,
+
+    notifiable_type: "Listing",
+
+    title,
+
+    message
+
+});
+
         return res.status(200).json({
             message: "Listing status updated successfully.",
             listing: {
@@ -1502,11 +1609,30 @@ export const get_single_listing = async (req, res, next) => {
                     }
                 }
             },
+            {
+    $lookup: {
+        from: "listingactivities",
+        localField: "_id",
+        foreignField: "listing_id",
+        as: "activity"
+    }
+},
+{
+    $addFields: {
+        total_views: {
+            $sum: "$activity.view_count"
+        },
+        total_clicks: {
+            $sum: "$activity.click_count"
+        }
+    }
+},
 
             {
                 $project: {
                     _id: 0,
-
+                    total_views: 1,
+                    total_clicks: 1,
                     listing_id: "$_id",
                     listing_code: 1,
                     status: 1,
@@ -1613,252 +1739,384 @@ const calculateDistance = (
     return R * c;
 };
 
-
-
+// get listings by map
 export const get_listing_by_radius = async (req, res, next) => {
-
     try {
+       const {
+    radius = 100,
+    latitude,
+    longitude,
+} = req.query;
 
-        const {
-            radius = 100
-        } = req.body;
+        if (!latitude || !longitude) {
+            return next(new BadRequestError("Latitude and longitude are required."));
+        }
 
-
-        // Center of Malaysia
-        const MALAYSIA_CENTER = {
-            latitude: 4.2105,
-            longitude: 101.9758
+        const center = {
+            latitude: Number(latitude),
+            longitude: Number(longitude),
         };
-
 
         const listings = await listingModel.aggregate([
 
-
             // Only active listings
-            {
-                $match:{
-                    status:"active"
-                }
-            },
-
+            { $match: { status: "active" } },
 
             // Get location
             {
-                $lookup:{
-                    from:"locations",
-                    localField:"location_id",
-                    foreignField:"_id",
-                    as:"location"
+                $lookup: {
+                    from: "locations",
+                    localField: "location_id",
+                    foreignField: "_id",
+                    as: "location"
                 }
             },
-
-
-            {
-                $unwind:"$location"
-            },
-
+            { $unwind: "$location" },
 
             // Get media
             {
-                $lookup:{
-                    from:"media",
-                    localField:"media_id",
-                    foreignField:"_id",
-                    as:"media"
+                $lookup: {
+                    from: "media",
+                    localField: "media_id",
+                    foreignField: "_id",
+                    pipeline: [
+                        { $project: { media_url: 1 } }
+                    ],
+                    as: "media"
                 }
             },
-
 
             // Get state
             {
-                $lookup:{
-                    from:"states",
-                    localField:"state_id",
-                    foreignField:"_id",
-                    as:"state"
+                $lookup: {
+                    from: "states",
+                    localField: "state_id",
+                    foreignField: "_id",
+                    pipeline: [
+                        { $project: { state: 1 } }
+                    ],
+                    as: "state"
                 }
             },
-
-
-            {
-                $unwind:{
-                    path:"$state",
-                    preserveNullAndEmptyArrays:true
-                }
-            },
-
+            { $unwind: { path: "$state", preserveNullAndEmptyArrays: true } },
 
             // Get district
             {
-                $lookup:{
-                    from:"districts",
-                    localField:"state_id",
-                    foreignField:"state_id",
-                    as:"district"
+                $lookup: {
+                    from: "districts",
+                    localField: "state_id",
+                    foreignField: "state_id",
+                    pipeline: [
+                        { $limit: 1 },
+                        { $project: { district: 1 } }
+                    ],
+                    as: "district"
                 }
             },
-
-
-            {
-                $unwind:{
-                    path:"$district",
-                    preserveNullAndEmptyArrays:true
-                }
-            },
-
+            { $unwind: { path: "$district", preserveNullAndEmptyArrays: true } },
 
             // Get deal types
             {
-                $lookup:{
-                    from:"dealtypes",
-                    localField:"deal_type_id",
-                    foreignField:"_id",
-                    as:"deal_types"
+                $lookup: {
+                    from: "dealtypes",
+                    localField: "deal_type_id",
+                    foreignField: "_id",
+                    pipeline: [
+                        { $project: { name: 1 } }
+                    ],
+                    as: "deal_types"
                 }
             },
-
 
             // Get feature tags
             {
-                $lookup:{
-                    from:"featuretags",
-                    localField:"feature_tags_id",
-                    foreignField:"_id",
-                    as:"feature_tags"
+                $lookup: {
+                    from: "featuretags",
+                    localField: "feature_tags_id",
+                    foreignField: "_id",
+                    pipeline: [
+                        { $project: { tag: 1 } }
+                    ],
+                    as: "feature_tags"
                 }
             },
 
-
             {
-                $project:{
-
-
-                    listing_id:"$_id",
-
-                    listing_code:1,
-
-                    status:1,
-
-
-                    category:1,
-
-                    area:1,
-
-                    price_sqft:1,
-
-
-                    total_price:{
-                        $multiply:[
-                            "$area",
-                            "$price_sqft"
-                        ]
+                $project: {
+                    listing_id: "$_id",
+                    listing_code: 1,
+                    status: 1,
+                    category: 1,
+                    area: 1,
+                    price_sqft: 1,
+                    total_price: { $multiply: ["$area", "$price_sqft"] },
+                    location: {
+                        latitude: { $arrayElemAt: ["$location.location.coordinates", 1] },
+                        longitude: { $arrayElemAt: ["$location.location.coordinates", 0] },
                     },
-
-
-                    location:{
-                        latitude:{
-                            $arrayElemAt:[
-                                "$location.location.coordinates",
-                                1
-                            ]
-                        },
-
-                        longitude:{
-                            $arrayElemAt:[
-                                "$location.location.coordinates",
-                                0
-                            ]
-                        }
+                    first_image: {
+                        $arrayElemAt: [{ $arrayElemAt: ["$media.media_url", 0] }, 0]
                     },
-
-
-                    first_image:{
-                        $arrayElemAt:[
-                            {
-                                $arrayElemAt:[
-                                    "$media.media_url",
-                                    0
-                                ]
-                            },
-                            0
-                        ]
-                    },
-
-
-                    state:"$state.state",
-
-
-                    district:"$district.district",
-
-
-                    deal_type:"$deal_types.name",
-
-
-                    feature_tags:"$feature_tags.tag"
-
+                    state: "$state.state",
+                    district: "$district.district",
+                    deal_type: "$deal_types.name",
+                    feature_tags: "$feature_tags.tag",
                 }
             }
 
         ]);
 
-
-
         const filteredListings = listings
-        .map(item=>{
-
-
-            const distance = calculateDistance(
-
-                MALAYSIA_CENTER.latitude,
-                MALAYSIA_CENTER.longitude,
-
-
-                Number(item.location.latitude),
-                Number(item.location.longitude)
-
-            );
-
-
-            return {
-
-                ...item,
-
-                distance_km:
-                    Number(distance.toFixed(2))
-
-            };
-
-
-        })
-
-        .filter(item =>
-            item.distance_km <= Number(radius)
-        )
-
-
-        .sort((a,b)=>
-            a.distance_km - b.distance_km
-        );
-
-
+            .map(item => {
+                const distance = calculateDistance(
+                    center.latitude,
+                    center.longitude,
+                    Number(item.location.latitude),
+                    Number(item.location.longitude),
+                );
+                return { ...item, distance_km: Number(distance.toFixed(2)) };
+            })
+            .filter(item => item.distance_km <= Number(radius))
+            .sort((a, b) => a.distance_km - b.distance_km);
 
         return res.status(200).json({
-
-            center:MALAYSIA_CENTER,
-
-            radius:`${radius} KM`,
-
-            total:filteredListings.length,
-
-            listings:filteredListings
-
+            center,
+            radius: `${radius} KM`,
+            total: filteredListings.length,
+            listings: filteredListings,
         });
 
+    } catch (err) {
+        next(err);
+    }
+};
 
-    } catch(err){
 
+export const deactivate_listing = async (req, res, next) => {
+    const session = await mongoose.startSession();
+
+    try {
+
+        session.startTransaction();
+
+        const { listing_id } = req.body;
+        if ( !listing_id ) throw new BadRequestError(" Please enter listing_id ")
+        const user_id = req.user.sub;
+
+        const listing = await listingModel
+            .findById(listing_id)
+            .session(session);
+
+        if (!listing) {
+            throw new NotFoundError("Listing not found.");
+        }
+
+
+        // Already inactive
+        if (listing.status === "inactive") {
+            await session.abortTransaction();
+
+            return res.status(200).json({
+                message: "Listing is already inactive."
+            });
+        }
+
+        // ---------------- DELETE CLOUDINARY FILES ----------------
+
+        if (listing.media_id?.length) {
+
+            const medias = await mediaModel.find({
+                _id: { $in: listing.media_id }
+            }).session(session);
+
+            for (const media of medias) {
+
+                if (!media.public_id?.length) continue;
+
+                for (let i = 0; i < media.public_id.length; i++) {
+
+                    const publicId = media.public_id[i];
+                    const mediaType = media.media_type?.[i];
+
+                    try {
+
+                            await delete_files_from_cloudinary(publicId, {
+                                resource_type: "image"
+                            });
+
+    
+
+                    } catch (err) {
+                        console.error(
+                            `Cloudinary delete failed: ${publicId}`,
+                            err.message
+                        );
+                    }
+                }
+            }
+
+            // Delete media documents
+            await mediaModel.deleteMany({
+                _id: { $in: listing.media_id }
+            }).session(session);
+
+            listing.media_id = [];
+        }
+
+        // ---------------- UPDATE LISTING ----------------
+
+        listing.status = "inactive";
+
+        await listing.save({ session });
+
+        await session.commitTransaction();
+
+         const { title , message} =NotificationTemplates.listingDelete({
+            listingCode : listing.listing_code,
+            status : "inactive"
+        })
+        await createNotification({
+
+    user_id: listing.user_id,
+
+    listing_id: listing._id,
+
+    notifiable_type: "Listing",
+
+    title,
+
+    message
+
+});
+        return res.status(200).json({
+            message: "Listing deactivated successfully."
+        });
+
+    } catch (err) {
+
+        await session.abortTransaction();
         next(err);
 
-    }
+    } finally {
 
+        session.endSession();
+
+    }
+};
+
+
+// get all views and counts 
+ export const get_all_views_count = async (req, res, next) => {
+    try {
+
+        const user_id = new mongoose.Types.ObjectId(req.user.sub);
+
+        const result = await listingModel.aggregate([
+
+            {
+                $match: {
+                    user_id,
+                    status: "active"
+                }
+            },
+
+            {
+                $lookup: {
+                    from: "listingactivities",
+                    localField: "_id",
+                    foreignField: "listing_id",
+                    as: "activities"
+                }
+            },
+
+            {
+                $project: {
+                    total_views: {
+                        $sum: "$activities.view_count"
+                    },
+                    total_clicks: {
+                        $sum: "$activities.click_count"
+                    }
+                }
+            },
+
+            {
+                $group: {
+                    _id: null,
+                    total_views: {
+                        $sum: "$total_views"
+                    },
+                    total_clicks: {
+                        $sum: "$total_clicks"
+                    }
+                }
+            },
+
+            {
+                $project: {
+                    _id: 0,
+                    total_views: 1,
+                    total_clicks: 1
+                }
+            }
+
+        ]);
+
+        return res.status(200).json(
+            result[0] || {
+                total_views: 0,
+                total_clicks: 0
+            }
+        );
+
+    } catch (err) {
+        next(err);
+    }
+};
+
+// make draft published 
+
+export const publish_listing = async (req, res, next) => {
+    try {
+
+        const { id } = req.params;
+
+        const listing = await listingModel.findById(id);
+
+        if (!listing)
+            throw new NotFoundError("Listing not found.");
+
+        if (listing.status !== "draft")
+            throw new BadRequestError("Only draft listings can be pending.");
+
+        listing.status = "pending";
+        listing.published_at = new Date();
+
+        await listing.save();
+
+        // Send notification
+        const { title , message} =NotificationTemplates.listingStatusChanged({
+            listingCode : listing.listing_code,
+            status : "pending"
+        })
+        await createNotification({
+
+    user_id: listing.user_id,
+
+    listing_id: listing._id,
+
+    notifiable_type: "Listing",
+
+    title,
+
+    message
+
+});
+        return res.status(200).json({
+            message: "Listing pending successfully."
+        });
+
+    } catch (err) {
+        next(err);
+    }
 };

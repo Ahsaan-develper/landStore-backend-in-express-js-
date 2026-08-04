@@ -1,4 +1,4 @@
-import { body , param } from "express-validator";
+import { body , param , query } from "express-validator";
 
 
 export const user_register_validator = [
@@ -27,6 +27,7 @@ export const user_detail_validator = [
     .isMobilePhone().withMessage("Phone format not correct "),
 
     body("IC")
+    .optional()
     .trim()
     .notEmpty().withMessage("Please enter IC number").bail()
     .isLength({min : 12 , max: 12}).withMessage("ID card character length must 12 ")

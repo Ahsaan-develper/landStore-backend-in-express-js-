@@ -1,38 +1,98 @@
 import dealTypeModel from "../models/dealType.model.js";
 import enquiryModel from "../models/enquiry.model.js";
 import listingModel from "../models/listing.model.js";
+import mediaModel from "../models/media.model.js";
 import messageModel from "../models/message.model.js";
 import stateModel from "../models/state.model.js";
-import { ConflictError, NotFoundError } from "../utils/error.utils.js";
+import { createNotification } from "../services/notification.service.js";
+import { NotificationTemplates } from "../template/notification.template.js";
+import { BadRequestError, ConflictError, NotFoundError } from "../utils/error.utils.js";
 import { enquiry_code_generator } from "../utils/unique_code_generator.utils.js";
 import mongoose from "mongoose";
 // create an enquiry 
-export const create_enquiry = async ( req , res , next )=>{
+export const create_enquiry = async (req, res, next) => {
     try {
-        const { listing_id , interest_type , estimated_budget , timeLine , role , message} = req.body ;
+
+        const {
+            listing_id,
+            interest_type,
+            estimated_budget,
+            timeLine,
+            role,
+            message
+        } = req.body;
+
         const user_id = req.user.sub;
+
+        // Check listing exists and is active
+        const listing = await listingModel.findOne({
+            _id: listing_id,
+            status: "active"
+        }).select("_id listing_code");
+
+        if (!listing) {
+            throw new NotFoundError(
+                "Listing not found or is no longer available or not active"
+            );
+        }
+
+        // Check existing enquiry
+        const existingEnquiry = await enquiryModel.findOne({
+            user_id,
+            listing_id
+        }).select("_id");
+
+        if (existingEnquiry) {
+            throw new ConflictError("Enquiry already exists.");
+        }
+
         const enquiry_code = await enquiry_code_generator();
-        const existing_enquiry = await enquiryModel.findOne({ user_id  , listing_id}).select("user_id listing_id");
-        if( existing_enquiry ) throw new ConflictError(" Enquiry already added");
+
         const enquiry = await enquiryModel.create({
-            listing_id , interest_type , estimated_budget , timeLine , role  , enquiry_code , user_id
+            listing_id,
+            interest_type,
+            estimated_budget,
+            timeLine,
+            role,
+            enquiry_code,
+            user_id
         });
-        const new_message = await messageModel.create({ body : message  , enquiry_id : enquiry._id })
-        res.status(201).json({
-            enquiry , message
+
+        await messageModel.create({
+            enquiry_id: enquiry._id,
+            body: message
         });
-    }catch ( err ){
-        next ( err );
+
+        // Notification
+        const template = NotificationTemplates.enquiryCreated({
+            enquiryCode: enquiry.enquiry_code
+        });
+
+        await createNotification({
+            user_id,
+            enquiry_id: enquiry._id,
+            notifiable_type: "Enquiry",
+            title: template.title,
+            message: template.message
+        });
+
+        return res.status(201).json({
+            message: "Enquiry created successfully.",
+            enquiry
+        });
+
+    } catch (err) {
+        next(err);
     }
-}
+};
 
 // get all user enquiry 
 export const get_all_enquiry = async (req, res, next) => {
     try {
 
-        const page = Math.max(Number(req.body.page) || 1, 1);
+        const page = Math.max(Number(req.query.page) || 1, 1);
 
-        const limit = 10;
+        const limit = Math.max(Number(req.query.limit) || 10, 1);
         const skip = (page - 1) * limit;
 
         const user_id = req.user.sub;
@@ -199,9 +259,9 @@ export const get_all_enquiry = async (req, res, next) => {
 export const get_all_enquiry_by_admin = async (req, res, next) => {
     try {
 
-        const  page   = Number(req.body.page)|| 1;
+        const  page   = Math.max(Number(req.query.page) || 1 , 1);
 
-        const limit = 10;
+        const limit = Math.max(Number(req.query.limit) || 10 , 1);
         const skip = (Number(page) - 1) * limit;
 
         const result = await enquiryModel.aggregate([
@@ -309,25 +369,49 @@ export const get_all_enquiry_by_admin = async (req, res, next) => {
 
 
 // change enquiry status by admin
-
 export const change_enquiry_status = async (req, res, next) => {
     try {
+        const {  status } = req.body;
+        const { enquiry_id } = req.params;
+        // if (!mongoose.Types.ObjectId.isValid(enquiry_id)) {
+        //     throw new BadRequestError("Invalid enquiry id.");
+        // }
 
-        const { enquiry_id, status } = req.body;
-
-        if (!mongoose.Types.ObjectId.isValid(enquiry_id)) {
-            throw new BadRequestError("Invalid enquiry id.");
-        }
-
-        const enquiry = await enquiryModel.findById(enquiry_id).select("status _id");
+        const enquiry = await enquiryModel.findById(enquiry_id).select(
+            "_id enquiry_code user_id status"
+        );
 
         if (!enquiry) {
             throw new NotFoundError("Enquiry not found.");
         }
 
+        if (enquiry.status === status) {
+            throw new BadRequestError(
+                `Enquiry is already ${status}.`
+            );
+        }
+
+        const oldStatus = enquiry.status;
+
         enquiry.status = status;
 
         await enquiry.save();
+
+        // Notification
+        const template = NotificationTemplates.enquiryStatusChanged({
+            enquiryCode: enquiry.enquiry_code,
+            oldStatus,
+            newStatus: status
+        });
+      
+        
+        await createNotification({
+            user_id : enquiry.user_id,
+            enquiry_id: enquiry._id,
+            notifiable_type: "Enquiry",
+            title: template.title,
+            message: template.message
+        });
 
         return res.status(200).json({
             message: "Enquiry status updated successfully.",
@@ -591,3 +675,54 @@ export const get_single_enquiry = async (req, res, next) => {
     }
 };
 
+// get geran docs 
+
+export const get_geran_docs_by_enquiry = async (req, res, next) => {
+    try {
+        const { enquiry_id } = req.params;
+
+        // Get enquiry → listing_id
+        const enquiry = await enquiryModel
+            .findById(enquiry_id, { listing_id: 1 })
+            .lean();
+
+        if (!enquiry) {
+            throw new NotFoundError("Enquiry not found.");
+        }
+
+        // Get listing → media_id
+        const listing = await listingModel
+            .findById(enquiry.listing_id, { media_id: 1 })
+            .lean();
+
+        if (!listing) {
+            throw new NotFoundError("Listing not found.");
+        }
+
+        // Get only geran URLs from media
+        const media = await mediaModel
+            .findOne(
+                { _id: { $in: listing.media_id } },
+                { media_url: 1, media_type: 1 }
+            )
+            .lean();
+
+        if (!media) {
+            throw new NotFoundError("Media not found.");
+        }
+
+        // Filter only geran docs by index
+        const geran_urls = media.media_url.filter(
+            (_, i) => media.media_type[i] === "document"
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "Geran documents fetched successfully.",
+            data: geran_urls,
+        });
+
+    } catch (err) {
+        next(err);
+    }
+};

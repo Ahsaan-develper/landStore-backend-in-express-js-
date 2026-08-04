@@ -4,7 +4,7 @@ import folderModel from "../models/folder.model.js";
 import folderListingModel from "../models/folderListing.model.js";
 import listingModel from "../models/listing.model.js";
 import { BadRequestError, NotFoundError } from "../utils/error.utils.js";
-
+import mongoose from "mongoose";
 export const create_folder = async ( req , res , next )=>{
     try {
         const { name } = req.body ;
@@ -25,8 +25,8 @@ export const create_folder = async ( req , res , next )=>{
 export const get_all_folder = async (req, res, next) => {
     try {
 
-        const page = parseInt(req.query.page) || 1;
-        const limit = 10;
+        const page = Math.max(Number(req.query.page) || 1, 1);
+        const limit = Math.max(Number(req.query.limit) || 10, 1);
         const skip = (page - 1) * limit;
 
         const user_id = req.user.sub;
@@ -106,7 +106,6 @@ export const add_listing_to_folder = async (req, res, next) => {
     }
 };
 
-import mongoose from "mongoose";
 
 export const get_folder_listings = async (req, res, next) => {
     try {
@@ -116,20 +115,22 @@ export const get_folder_listings = async (req, res, next) => {
         const limit = 10;
         const skip = (page - 1) * limit;
 
-        // Check folder exists
-        const folder = await folderModel.findById(folder_id);
+        const folder_oid = new mongoose.Types.ObjectId(folder_id);
+
+        // .lean() skips Mongoose doc hydration — faster for existence + name check
+        const folder = await folderModel
+            .findById(folder_oid, { folder_name: 1 })
+            .lean();
 
         if (!folder) {
             throw new NotFoundError("Folder not found.");
         }
 
-        const result = await folderListingModel.aggregate([
+        const [result] = await folderListingModel.aggregate([
 
             // Match folder first
             {
-                $match: {
-                    folder_id: new mongoose.Types.ObjectId(folder_id)
-                }
+                $match: { folder_id: folder_oid }
             },
 
             {
@@ -138,156 +139,140 @@ export const get_folder_listings = async (req, res, next) => {
                     listings: [
 
                         { $sort: { createdAt: -1 } },
-
                         { $skip: skip },
-
                         { $limit: limit },
 
-                        // Listing
+                        // Listing — fetch only required fields
                         {
                             $lookup: {
                                 from: "listings",
                                 localField: "listing_id",
                                 foreignField: "_id",
+                                pipeline: [
+                                    {
+                                        $project: {
+                                            listing_code: 1,
+                                            status: 1,
+                                            category: 1,
+                                            area: 1,
+                                            price_sqft: 1,
+                                            media_id: 1,
+                                            state_id: 1,
+                                            deal_type_id: 1,
+                                        }
+                                    }
+                                ],
                                 as: "listing"
                             }
                         },
-                        {
-                            $unwind: "$listing"
-                        },
+                        { $unwind: "$listing" },
 
-                        // Media
+                        // Media — project only first image URL before joining
                         {
                             $lookup: {
                                 from: "media",
                                 localField: "listing.media_id",
                                 foreignField: "_id",
+                                pipeline: [
+                                    {
+                                        $project: {
+                                            first_image: { $arrayElemAt: ["$media_url", 0] }
+                                        }
+                                    }
+                                ],
                                 as: "media"
                             }
                         },
 
-                        // State
+                        // State — only state name
                         {
                             $lookup: {
                                 from: "states",
                                 localField: "listing.state_id",
                                 foreignField: "_id",
+                                pipeline: [
+                                    { $project: { state: 1 } }
+                                ],
                                 as: "state"
                             }
                         },
-                        {
-                            $unwind: {
-                                path: "$state",
-                                preserveNullAndEmptyArrays: true
-                            }
-                        },
 
-                        // District
+                        // District — $limit: 1 prevents row multiplication
+                        // when multiple districts share the same state_id
                         {
                             $lookup: {
                                 from: "districts",
                                 localField: "listing.state_id",
                                 foreignField: "state_id",
+                                pipeline: [
+                                    { $limit: 1 },
+                                    { $project: { district: 1 } }
+                                ],
                                 as: "district"
                             }
                         },
-                        {
-                            $unwind: {
-                                path: "$district",
-                                preserveNullAndEmptyArrays: true
-                            }
-                        },
 
-                        // Deal Type
+                        // Deal Type — only name field
                         {
                             $lookup: {
                                 from: "dealtypes",
                                 localField: "listing.deal_type_id",
                                 foreignField: "_id",
+                                pipeline: [
+                                    { $project: { name: 1 } }
+                                ],
                                 as: "deal_type"
                             }
                         },
 
                         {
                             $project: {
-
                                 _id: 0,
-
                                 listing_id: "$listing._id",
-
                                 listing_code: "$listing.listing_code",
-
                                 status: "$listing.status",
-
                                 category: "$listing.category",
-
                                 area: "$listing.area",
-
                                 price_sqft: "$listing.price_sqft",
-
                                 total_price: {
                                     $multiply: [
                                         "$listing.area",
                                         "$listing.price_sqft"
                                     ]
                                 },
-
                                 image: {
-                                    $arrayElemAt: [
-                                        {
-                                            $arrayElemAt: [
-                                                "$media.media_url",
-                                                0
-                                            ]
-                                        },
-                                        0
-                                    ]
+                                    $arrayElemAt: ["$media.first_image", 0]
                                 },
-
-                                state: "$state.state",
-
-                                district: "$district.district",
-
+                                state: {
+                                    $arrayElemAt: ["$state.state", 0]
+                                },
+                                district: {
+                                    $arrayElemAt: ["$district.district", 0]
+                                },
                                 deal_type: {
-                                    $arrayElemAt: [
-                                        "$deal_type.name",
-                                        0
-                                    ]
+                                    $arrayElemAt: ["$deal_type.name", 0]
                                 }
                             }
                         }
-
                     ],
 
                     totalCount: [
-                        {
-                            $count: "count"
-                        }
+                        { $count: "count" }
                     ]
-
                 }
             }
 
-        ]);
+        ], { allowDiskUse: true });
 
-        const listings = result[0].listings;
-        const totalListings = result[0].totalCount[0]?.count || 0;
-        const totalPages = Math.ceil(totalListings / limit);
+        const totalListings = result.totalCount[0]?.count || 0;
 
         return res.status(200).json({
-
             message: "Folder listings fetched successfully.",
-
             folder_name: folder.folder_name,
-
             page,
-
-            totalPages,
-
+            totalPages: Math.ceil(totalListings / limit),
             totalListings,
-
-            listings
-
+            listings: result.listings,
         });
 
     } catch (err) {

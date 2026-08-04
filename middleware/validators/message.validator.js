@@ -7,6 +7,7 @@ export const send_enquiry_message_validator = [
     .isMongoId().withMessage(" enquiry id format not correct "),
 
     body("body")
+    .optional()
     .trim()
     .notEmpty().withMessage(" Please enter message ").bail()
     .isLength({ max : 500}).withMessage(" Message character length must under 500")

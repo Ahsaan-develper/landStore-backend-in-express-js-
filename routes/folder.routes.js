@@ -10,7 +10,7 @@ export const folder_router = Router();
 // create an folder 
 folder_router.post("/" , verify_token , authorize("individual" , "company" , "keporasi") , create_folder_validator , HandleValidationError , create_folder);
 
-folder_router.get("/" , verify_token , authorize("individual" , "company" , "keporasi") , get_all_folder);
+folder_router.get("/" , verify_token , authorize("individual" , "company" , "keporasi") , folder_page_validator , HandleValidationError , get_all_folder);
 
 // add listing into a folder 
 folder_router.post("/add_listing" , verify_token , authorize("individual" , "company" , "keporasi")  , add_listing_folder_validator , HandleValidationError, add_listing_to_folder);

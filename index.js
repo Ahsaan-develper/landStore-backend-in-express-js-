@@ -1,3 +1,4 @@
+// import "express-async-errors";
 import express from "express";
 import { _config } from "./config/envConfig.js";
 import errorHandler from "./middleware/error.middleware.js";
@@ -12,9 +13,10 @@ import { folder_router } from "./routes/folder.routes.js";
 import { enquiry_router } from "./routes/enquiry.routes.js";
 import { message_router } from "./routes/message.routes.js";
 import { schedule_router } from "./routes/schedule.routes.js";
+import { notification_router } from "./routes/notification.routes.js";
 
 const app = express();
-app.use(errorHandler)
+
 app.use(express.json())
 app.use(cookieParser())
 app.use(trackVisitor);
@@ -26,6 +28,9 @@ app.use("/folder"  , folder_router);
 app.use("/enquiry"  , enquiry_router);
 app.use("/message"  , message_router);
 app.use("/schedule"  , schedule_router);
+app.use("/notification"  , notification_router);
+
+app.use(errorHandler)
 const start_server = async( )=>{
     try {
         await connect_DB()

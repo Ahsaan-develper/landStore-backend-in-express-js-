@@ -11,5 +11,5 @@ const enquirySchema = new mongoose.Schema({
   enquiry_code: { type: String, unique: true },
   // message: { type: String, required : true  },
 }, { timestamps: true });
-
+enquirySchema.index({user_id : 1 , listing_id : 1 })
 export default mongoose.model("Enquiry", enquirySchema);

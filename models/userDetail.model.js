@@ -5,5 +5,5 @@ const userDetailSchema = new mongoose.Schema({
   phone_number: { type: String, unique: true, required: true },
   IC: { type: String, unique: true , sparse: true },
 }, { timestamps: true });
-
+userDetailSchema.index({ user_id: 1 });
 export default mongoose.model("UserDetail", userDetailSchema);

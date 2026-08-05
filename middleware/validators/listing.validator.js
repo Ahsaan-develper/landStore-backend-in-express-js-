@@ -290,7 +290,7 @@ export const update_listing_validator = [
 
 
 export const change_listing_status_admin_validator = [
-    body("listing_id")
+    param("listing_id")
     .trim()
     .notEmpty().withMessage("Id is required").bail()
     .isMongoId().withMessage("Id format is not correct"),

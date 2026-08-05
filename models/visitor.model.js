@@ -89,7 +89,7 @@ const visitorSchema = new mongoose.Schema({
     timestamps: true
 });
 
-visitorSchema.index({ visitor_token: 1 });
+
 visitorSchema.index({ browser_signature: 1 });
 visitorSchema.index({ user_id: 1 });
 visitorSchema.index({ current_ip: 1 });

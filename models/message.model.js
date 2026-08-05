@@ -8,5 +8,5 @@ const messageSchema = new mongoose.Schema({
   is_read: { type : Boolean  , default : null},
   read_at: { type : Date , default : null},
 }, { timestamps: true });
-
+messageSchema.index({ sender_id: 1 });
 export default mongoose.model("Message", messageSchema);

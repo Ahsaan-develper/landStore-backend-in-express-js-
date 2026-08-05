@@ -417,8 +417,8 @@ export const make_draft_by_user = async (req, res, next) => {
 
 export const get_listing_by_user = async (req, res, next) => {
     try {
-        const page = Math.max(1, Number(req.body.page) || 1);
-        const limit = 10;
+        const page = Math.max(Number(req.query.page) || 1, 1);
+        const limit = Math.max(Number(req.query.limit) || 10, 1);
         const skip = (page - 1) * limit;
 
         const userId = new mongoose.Types.ObjectId(req.user.sub);
@@ -888,9 +888,8 @@ if (new_images.length || new_docs.length) {
 };
 
 
-// ── constants ─────────────────────────────────────────────────────────────────
-const LIMIT       = 10;
-const SQM_TO_SQFT = 10.7639; // Malaysian property standard (sq ft primary)
+// // ── constants ─────────────────────────────────────────────────────────────────
+const SQM_TO_SQFT = 10.7639;
 
 // ── price calculator ──────────────────────────────────────────────────────────
 const calculate_total_price = (price_sqft, area, unit) => {
@@ -898,7 +897,6 @@ const calculate_total_price = (price_sqft, area, unit) => {
     return parseFloat((price_sqft * area_in_sqft).toFixed(2));
 };
 
-// ── listing formatter (shapes each doc before sending) ────────────────────────
 const format_listing = (listing) => {
     // Thumbnail → first image entry in media doc
     const media       = listing.media_id?.[0];
@@ -928,9 +926,9 @@ const format_listing = (listing) => {
     };
 };
 
-// ── shared DB helper ──────────────────────────────────────────────────────────
-const get_listings_by_status = async (user_id, status, page) => {
-    const skip = (page - 1) * LIMIT;
+// // ── shared DB helper ──────────────────────────────────────────────────────────
+const get_listings_by_status = async (user_id, status, page, limit) => {
+    const skip = (page - 1) * limit;
 
     const [listings, total] = await Promise.all([
         listingModel
@@ -942,7 +940,7 @@ const get_listings_by_status = async (user_id, status, page) => {
                 select: "media_url media_type",
             })
             .skip(skip)
-            .limit(LIMIT)
+            .limit(limit)
             .lean(),
         listingModel.countDocuments({ user_id, status }),
     ]);
@@ -952,8 +950,8 @@ const get_listings_by_status = async (user_id, status, page) => {
         pagination: {
             total,
             page,
-            limit      : LIMIT,
-            total_pages: Math.ceil(total / LIMIT),
+            limit      : limit,
+            total_pages: Math.ceil(total / limit),
         },
     };
 };
@@ -962,18 +960,19 @@ const get_listings_by_status = async (user_id, status, page) => {
 export const get_draft_listings = async (req, res, next) => {
     try {
         const user_id = req.user.sub;
-        const page    = parseInt(req.query.page) || 1;
-        const data    = await get_listings_by_status(user_id, "draft", page);
+        const page    = Math.max(Number(req.query.page) || 1, 1);
+        const limit   = Math.max(Number(req.query.limit) || 10, 1);
+        const data    = await get_listings_by_status(user_id, "draft", page, limit);
         return res.status(200).json({ data });
     } catch (err) { console.error(err); next(err); }
 };
 
-// ── 2. Under Review ───────────────────────────────────────────────────────────
 export const get_under_review_listings = async (req, res, next) => {
     try {
         const user_id = req.user.sub;
-        const page    = parseInt(req.query.page) || 1;
-        const data    = await get_listings_by_status(user_id, "under_review", page);
+        const page    = Math.max(Number(req.query.page) || 1, 1);
+        const limit   = Math.max(Number(req.query.limit) || 10, 1);
+        const data    = await get_listings_by_status(user_id, "under_review", page, limit);
         return res.status(200).json({ data });
     } catch (err) { console.error(err); next(err); }
 };
@@ -982,8 +981,9 @@ export const get_under_review_listings = async (req, res, next) => {
 export const get_pending_listings = async (req, res, next) => {
     try {
         const user_id = req.user.sub;
-        const page    = parseInt(req.query.page) || 1;
-        const data    = await get_listings_by_status(user_id, "pending", page);
+        const page    = Math.max(Number(req.query.page) || 1, 1);
+        const limit   = Math.max(Number(req.query.limit) || 10, 1);
+        const data    = await get_listings_by_status(user_id, "pending", page, limit);
         return res.status(200).json({ data });
     } catch (err) { console.error(err); next(err); }
 };
@@ -992,8 +992,9 @@ export const get_pending_listings = async (req, res, next) => {
 export const get_inactive_listings = async (req, res, next) => {
     try {
         const user_id = req.user.sub;
-        const page    = parseInt(req.query.page) || 1;
-        const data    = await get_listings_by_status(user_id, "inactive", page);
+        const page    = Math.max(Number(req.query.page) || 1, 1);
+        const limit   = Math.max(Number(req.query.limit) || 10, 1);
+        const data    = await get_listings_by_status(user_id, "inactive", page, limit);
         return res.status(200).json({ data });
     } catch (err) { console.error(err); next(err); }
 };
@@ -1002,302 +1003,356 @@ export const get_inactive_listings = async (req, res, next) => {
 export const get_active_listings = async (req, res, next) => {
     try {
         const user_id = req.user.sub;
-        const page    = parseInt(req.query.page) || 1;
-        const data    = await get_listings_by_status(user_id, "active", page);
+        const page    = Math.max(Number(req.query.page) || 1, 1);
+        const limit   = Math.max(Number(req.query.limit) || 10, 1);
+        const data    = await get_listings_by_status(user_id, "active", page, limit);
         return res.status(200).json({ data });
     } catch (err) { console.error(err); next(err); }
 };
 
 
-// apply regex search
+// ── search helpers ────────────────────────────────────────────────────────────
+const escape_regex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 
-// ── search listings ───────────────────────────────────────────────────────────
-export const search_listings = async (req, res, next) => {
-    try {
-        const {
-            search,          
-            deal_type,       
-            category,        
-            terrain,         // Flat | Hilly | Mixed
-            utilization,     // Agricultural use | Commercial use | etc.
-            tanah_rizab,     // yes | no | both
-            area_min,
-            area_max,
-            price_sqft_min,
-            price_sqft_max,
-            title_type,      // leasehold | freehold  (regex → matches either)
-        } = req.query;
+const exact_match = (value) => {
+    const list = (Array.isArray(value) ? value : [value])
+        .map(v => String(v).trim())
+        .filter(Boolean)
+        .map(v => new RegExp(`^${escape_regex(v)}$`, "i"));
 
-        const page = parseInt(req.query.page) || 1;
-        const skip = (page - 1) * LIMIT;
-
-        // ── 1. Base match — always active only ────────────────────────────
-        const base_match = { status: "active" };
-
-        if (category)    base_match.category    = { $regex: category,    $options: "i" };
-        if (utilization) base_match.utilization = { $regex: utilization, $options: "i" };
-
-        if (tanah_rizab === "yes") base_match.is_malay_reserve_land = true;
-        if (tanah_rizab === "no")  base_match.is_malay_reserve_land = false;
-        // "both" → no filter added
-
-        if (area_min || area_max) {
-            base_match.area = {};
-            if (area_min) base_match.area.$gte = parseFloat(area_min);
-            if (area_max) base_match.area.$lte = parseFloat(area_max);
-        }
-
-        if (price_sqft_min || price_sqft_max) {
-            base_match.price_sqft = {};
-            if (price_sqft_min) base_match.price_sqft.$gte = parseFloat(price_sqft_min);
-            if (price_sqft_max) base_match.price_sqft.$lte = parseFloat(price_sqft_max);
-        }
-
-        // ── 2. Aggregation pipeline ────────────────────────────────────────
-        const pipeline = [
-            { $match: base_match },
-
-            // State
-            {
-                $lookup: {
-                    from        : "states",
-                    localField  : "state_id",
-                    foreignField: "_id",
-                    as          : "state",
-                },
-            },
-            { $unwind: { path: "$state", preserveNullAndEmptyArrays: true } },
-
-            // District (matched by state_id since listing has no district_id)
-            {
-                $lookup: {
-                    from        : "districts",
-                    localField  : "state_id",
-                    foreignField: "state_id",
-                    as          : "districts",
-                },
-            },
-
-            // Deal types
-            {
-                $lookup: {
-                    from        : "dealtypes",
-                    localField  : "deal_type_id",
-                    foreignField: "_id",
-                    as          : "deal_type_docs",
-                },
-            },
-
-            // Feature tags
-            {
-                $lookup: {
-                    from        : "featuretags",
-                    localField  : "feature_tags_id",
-                    foreignField: "_id",
-                    as          : "feature_tag_docs",
-                },
-            },
-
-            // Terrain
-            {
-                $lookup: {
-                    from        : "terraintypes",
-                    localField  : "terrain_id",
-                    foreignField: "_id",
-                    as          : "terrain_docs",
-                },
-            },
-
-            // Tenure
-            {
-                $lookup: {
-                    from        : "tenuretypes",
-                    localField  : "tenure_id",
-                    foreignField: "_id",
-                    as          : "tenure_doc",
-                },
-            },
-            { $unwind: { path: "$tenure_doc", preserveNullAndEmptyArrays: true } },
-
-            // Media (thumbnail only needs url + type)
-            {
-                $lookup: {
-                    from        : "media",
-                    localField  : "media_id",
-                    foreignField: "_id",
-                    as          : "media_docs",
-                },
-            },
-        ];
-
-        // ── 3. Post-lookup regex filters ───────────────────────────────────
-
-        // Location: match state name OR any district name under that state
-        if (search) {
-            pipeline.push({
-                $match: {
-                    $or: [
-                        { "state.state"          : { $regex: search, $options: "i" } },
-                        { "districts.district"   : { $regex: search, $options: "i" } },
-                    ],
-                },
-            });
-        }
-
-        // Deal type: name is an array inside each doc → regex traverses array
-        if (deal_type) {
-            pipeline.push({
-                $match: {
-                    "deal_type_docs.name": { $regex: deal_type, $options: "i" },
-                },
-            });
-        }
-
-        // Terrain: same pattern
-        if (terrain) {
-            pipeline.push({
-                $match: {
-                    "terrain_docs.name": { $regex: terrain, $options: "i" },
-                },
-            });
-        }
-
-        // Title type: leasehold or freehold — regex so partial match also works
-        if (title_type) {
-            pipeline.push({
-                $match: {
-                    "tenure_doc.type": { $regex: title_type, $options: "i" },
-                },
-            });
-        }
-
-        // ── 4. Count pipeline (clone before pagination stages) ─────────────
-        const count_pipeline = [...pipeline, { $count: "total" }];
-
-        // ── 5. Pagination + projection ─────────────────────────────────────
-        pipeline.push(
-            { $skip: skip },
-            { $limit: LIMIT },
-            {
-                $project: {
-                    _id                  : 1,
-                    listing_code         : 1,
-                    status               : 1,
-                    category             : 1,
-                    utilization          : 1,
-                    relation             : 1,
-                    is_malay_reserve_land: 1,
-                    unit                 : 1,
-                    area                 : 1,
-                    price_sqft           : 1,
-
-                    // Total price: convert sqm → sqft if needed, then × price_sqft
-                    total_price_myr: {
-                        $round: [
-                            {
-                                $multiply: [
-                                    "$price_sqft",
-                                    {
-                                        $cond: [
-                                            { $eq: ["$unit", "sqm"] },
-                                            { $multiply: ["$area", SQM_TO_SQFT] },
-                                            "$area",
-                                        ],
-                                    },
-                                ],
-                            },
-                            2,
-                        ],
-                    },
-
-                    state   : "$state.state",
-                    district: { $arrayElemAt: ["$districts.district", 0] },
-
-                    // Flatten array-of-arrays (each doc's name/tag field is itself an array)
-                    deal_types: {
-                        $reduce: {
-                            input       : "$deal_type_docs.name",
-                            initialValue: [],
-                            in          : { $concatArrays: ["$$value", "$$this"] },
-                        },
-                    },
-                    feature_tags: {
-                        $reduce: {
-                            input       : "$feature_tag_docs.tag",
-                            initialValue: [],
-                            in          : { $concatArrays: ["$$value", "$$this"] },
-                        },
-                    },
-                    terrain_types: {
-                        $reduce: {
-                            input       : "$terrain_docs.name",
-                            initialValue: [],
-                            in          : { $concatArrays: ["$$value", "$$this"] },
-                        },
-                    },
-
-                    tenure_type: "$tenure_doc.type",
-
-                    // Thumbnail: first "image" entry in first media doc
-                    thumbnail: {
-                        $let: {
-                            vars: {
-                                m: { $arrayElemAt: ["$media_docs", 0] },
-                            },
-                            in: {
-                                $let: {
-                                    vars: {
-                                        idx: { $indexOfArray: ["$$m.media_type", "image"] },
-                                    },
-                                    in: {
-                                        $cond: [
-                                            { $gte: ["$$idx", 0] },
-                                            { $arrayElemAt: ["$$m.media_url", "$$idx"] },
-                                            null,
-                                        ],
-                                    },
-                                },
-                            },
-                        },
-                    },
-                },
-            }
-        );
-
-        // ── 6. Execute in parallel ─────────────────────────────────────────
-        const [listings, count_result] = await Promise.all([
-            listingModel.aggregate(pipeline),
-            listingModel.aggregate(count_pipeline),
-        ]);
-
-        const total = count_result[0]?.total ?? 0;
-
-        return res.status(200).json({
-            data: {
-                listings,
-                pagination: {
-                    total,
-                    page,
-                    limit      : LIMIT,
-                    total_pages: Math.ceil(total / LIMIT),
-                },
-            },
-        });
-
-    } catch (err) {
-        console.error(err);
-        next(err);
-    }
+    if (!list.length) return null;
+    return list.length === 1 ? list[0] : { $in: list };
 };
 
 
+const TOTAL_PRICE_EXPR = {
+    $round: [
+        {
+            $multiply: [
+                "$price_sqft",
+                {
+                    $cond: [
+                        { $eq: ["$unit", "acres"] },
+                        { $multiply: ["$area", 43560] },
+                        "$area"
+                    ]
+                }
+            ]
+        },
+        2
+    ]
+};
+
+
+export const search_listings = async (req, res, next) => {
+    try {
+        const page = Math.max(Number(req.query.page) || 1, 1);
+        const limit = Math.max(Number(req.query.limit) || 10, 1);
+        const skip = (page - 1) * limit;
+
+        const {
+            state,
+            district,
+            category,
+            utilization,
+            relation,
+            terrain,
+            deal_type,
+            feature_tag,
+            is_malay_reserve_land,
+            unit,
+            min_area,
+            max_area,
+            min_price,
+            max_price
+        } = req.query;
+
+        const pipeline = [];
+
+        // ---------- BASE MATCH (fields stored on the listing itself) ----------
+        const match = { status: "active" };
+
+        const category_match    = category    ? exact_match(category)    : null;
+        const utilization_match = utilization ? exact_match(utilization) : null;
+        const relation_match    = relation    ? exact_match(relation)    : null;
+        const unit_match        = unit        ? exact_match(unit)        : null;
+
+        if (category_match)    match.category    = category_match;
+        if (utilization_match) match.utilization = utilization_match;
+        if (relation_match)    match.relation    = relation_match;
+        if (unit_match)        match.unit        = unit_match;
+
+        if (is_malay_reserve_land !== undefined && is_malay_reserve_land !== "") {
+            match.is_malay_reserve_land =
+                is_malay_reserve_land === "true" || is_malay_reserve_land === true;
+        }
+
+        // Area range
+        if (min_area || max_area) {
+            match.area = {};
+            if (min_area) match.area.$gte = Number(min_area);
+            if (max_area) match.area.$lte = Number(max_area);
+        }
+
+        pipeline.push({ $match: match });
+
+        pipeline.push({ $addFields: { total_price: TOTAL_PRICE_EXPR } });
+
+        if (min_price || max_price) {
+            const price_range = {};
+            if (min_price) price_range.$gte = Number(min_price);
+            if (max_price) price_range.$lte = Number(max_price);
+            pipeline.push({ $match: { total_price: price_range } });
+        }
+
+        const state_match = state ? exact_match(state) : null;
+
+        pipeline.push({
+            $lookup: {
+                from: "states",
+                let: { state_id: "$state_id" },
+                pipeline: [
+                    {
+                        $match: {
+                            $expr: { $eq: ["$_id", "$$state_id"] },
+                            ...(state_match ? { state: state_match } : {})
+                        }
+                    },
+                    { $project: { _id: 0, state: 1 } }
+                ],
+                as: "state_doc"
+            }
+        });
+
+        if (state_match) {
+            pipeline.push({ $match: { "state_doc.0": { $exists: true } } });
+        }
+
+
+        const district_match = district ? exact_match(district) : null;
+
+        pipeline.push({
+            $lookup: {
+                from: "districts",
+                let: { state_id: "$state_id" },
+                pipeline: [
+                    {
+                        $match: {
+                            $expr: { $eq: ["$state_id", "$$state_id"] },
+                            ...(district_match ? { district: district_match } : {})
+                        }
+                    },
+                    { $project: { _id: 0, district: 1 } }
+                ],
+                as: "district_doc"
+            }
+        });
+
+        if (district_match) {
+            pipeline.push({ $match: { "district_doc.0": { $exists: true } } });
+        }
+
+        const deal_type_match = deal_type ? exact_match(deal_type) : null;
+
+        pipeline.push({
+            $lookup: {
+                from: "dealtypes",
+                let: { ids: "$deal_type_id" },
+                pipeline: [
+                    {
+                        $match: {
+                            $expr: { $in: ["$_id", "$$ids"] },
+                            ...(deal_type_match ? { name: deal_type_match } : {})
+                        }
+                    },
+                    { $project: { _id: 0, name: 1 } }
+                ],
+                as: "deal_type_doc"
+            }
+        });
+
+        if (deal_type_match) {
+            pipeline.push({ $match: { "deal_type_doc.0": { $exists: true } } });
+        }
+
+        // ---------- TERRAIN ----------
+        const terrain_match = terrain ? exact_match(terrain) : null;
+
+        pipeline.push({
+            $lookup: {
+                from: "terraintypes",
+                let: { ids: "$terrain_id" },
+                pipeline: [
+                    {
+                        $match: {
+                            $expr: { $in: ["$_id", "$$ids"] },
+                            ...(terrain_match ? { name: terrain_match } : {})
+                        }
+                    },
+                    { $project: { _id: 0, name: 1 } }
+                ],
+                as: "terrain_doc"
+            }
+        });
+
+        if (terrain_match) {
+            pipeline.push({ $match: { "terrain_doc.0": { $exists: true } } });
+        }
+
+        // ---------- FEATURE TAGS ----------
+        const feature_tag_match = feature_tag ? exact_match(feature_tag) : null;
+
+        pipeline.push({
+            $lookup: {
+                from: "featuretags",
+                let: { ids: "$feature_tags_id" },
+                pipeline: [
+                    {
+                        $match: {
+                            $expr: { $in: ["$_id", "$$ids"] },
+                            ...(feature_tag_match ? { tag: feature_tag_match } : {})
+                        }
+                    },
+                    { $project: { _id: 0, tag: 1 } }
+                ],
+                as: "feature_tag_doc"
+            }
+        });
+
+        if (feature_tag_match) {
+            pipeline.push({ $match: { "feature_tag_doc.0": { $exists: true } } });
+        }
+
+        // ---------- PAGINATION + OUTPUT ----------
+        pipeline.push({
+            $facet: {
+                listings: [
+                    { $sort: { createdAt: -1, _id: -1 } },
+                    { $skip: skip },
+                    { $limit: limit },
+
+                    {
+                        $lookup: {
+                            from: "media",
+                            let: { ids: "$media_id" },
+                            pipeline: [
+                                { $match: { $expr: { $in: ["$_id", "$$ids"] } } },
+                                { $limit: 1 },
+                                { $project: { _id: 0, media_url: 1 } }
+                            ],
+                            as: "media"
+                        }
+                    },
+
+                    {
+                        $lookup: {
+                            from: "locations",
+                            let: { location_id: "$location_id" },
+                            pipeline: [
+                                { $match: { $expr: { $eq: ["$_id", "$$location_id"] } } },
+                                { $project: { _id: 0, location: 1 } }
+                            ],
+                            as: "location"
+                        }
+                    },
+
+                    {
+                        $project: {
+                            _id: 0,
+                            listing_id: "$_id",
+                            listing_code: 1,
+                            status: 1,
+                            category: 1,
+                            utilization: 1,
+                            relation: 1,
+                            is_malay_reserve_land: 1,
+                            public_description: 1,
+                            unit: 1,
+                            area: 1,
+                            price_sqft: 1,
+                            total_price: 1,
+                            createdAt: 1,
+
+                            state: { $first: "$state_doc.state" },
+                            district: { $first: "$district_doc.district" },
+
+                            deal_types: {
+                                $reduce: {
+                                    input: "$deal_type_doc.name",
+                                    initialValue: [],
+                                    in: { $setUnion: ["$$value", "$$this"] }
+                                }
+                            },
+                            terrain: {
+                                $reduce: {
+                                    input: "$terrain_doc.name",
+                                    initialValue: [],
+                                    in: { $setUnion: ["$$value", "$$this"] }
+                                }
+                            },
+                            feature_tags: {
+                                $reduce: {
+                                    input: "$feature_tag_doc.tag",
+                                    initialValue: [],
+                                    in: { $setUnion: ["$$value", "$$this"] }
+                                }
+                            },
+
+                            image: { $first: { $first: "$media.media_url" } },
+
+                            location: {
+                                longitude: {
+                                    $arrayElemAt: [
+                                        { $first: "$location.location.coordinates" },
+                                        0
+                                    ]
+                                },
+                                latitude: {
+                                    $arrayElemAt: [
+                                        { $first: "$location.location.coordinates" },
+                                        1
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                ],
+
+                totalCount: [{ $count: "count" }]
+            }
+        });
+
+        const [result] = await listingModel.aggregate(pipeline);
+
+        const listings = result?.listings || [];
+        const total = result?.totalCount?.[0]?.count || 0;
+        const totalPages = Math.ceil(total / limit);
+
+        return res.status(200).json({
+            success: true,
+            message: "Listings fetched successfully.",
+            data: listings,
+            pagination: {
+                currentPage: page,
+                totalPages,
+                totalListings: total,
+                perPage: limit,
+                hasNextPage: page < totalPages,
+                hasPreviousPage: page > 1
+            }
+        });
+
+    } catch (err) {
+        next(err);
+    }
+};
 // get all listings by admin
 
 export const get_all_listings_by_admin = async (req, res, next) => {
     try {
-        const page = Math.max(parseInt(req.query.page) || 1, 1);
-        const limit = 10;
+        const page = Math.max(Number(req.query.page) || 1, 1);
+        const limit = Math.max(Number(req.query.limit) || 10, 1);
         const skip = (page - 1) * limit;
 
         const result = await listingModel.aggregate([
@@ -1409,9 +1464,9 @@ export const get_all_listings_by_admin = async (req, res, next) => {
 
 export const change_listing_status = async (req, res, next) => {
     try {
-        const { listing_id, status } = req.body;
+        const { status } = req.body;
+        const { listing_id } = req.params;
 
-        
         const listing = await listingModel.findByIdAndUpdate(
             listing_id,
             {
@@ -1431,7 +1486,7 @@ export const change_listing_status = async (req, res, next) => {
 
         const { title , message} =NotificationTemplates.listingStatusChanged({
             listingCode : listing.listing_code,
-            status 
+            newStatus :status
         })
         await createNotification({
 
@@ -1762,7 +1817,7 @@ export const get_listing_by_radius = async (req, res, next) => {
             // Only active listings
             { $match: { status: "active" } },
 
-            // Get location
+        
             {
                 $lookup: {
                     from: "locations",
@@ -1899,12 +1954,12 @@ export const deactivate_listing = async (req, res, next) => {
 
         session.startTransaction();
 
-        const { listing_id } = req.body;
-        if ( !listing_id ) throw new BadRequestError(" Please enter listing_id ")
+        const { id } = req.params;
+        if ( !id ) throw new BadRequestError(" Please enter listing_id ")
         const user_id = req.user.sub;
 
         const listing = await listingModel
-            .findById(listing_id)
+            .findById(id)
             .session(session);
 
         if (!listing) {
@@ -1921,7 +1976,6 @@ export const deactivate_listing = async (req, res, next) => {
             });
         }
 
-        // ---------------- DELETE CLOUDINARY FILES ----------------
 
         if (listing.media_id?.length) {
 
@@ -1963,7 +2017,6 @@ export const deactivate_listing = async (req, res, next) => {
             listing.media_id = [];
         }
 
-        // ---------------- UPDATE LISTING ----------------
 
         listing.status = "inactive";
 
@@ -2005,8 +2058,8 @@ export const deactivate_listing = async (req, res, next) => {
 };
 
 
-// get all views and counts 
- export const get_all_views_count = async (req, res, next) => {
+// get all views and counts
+export const get_all_views_count = async (req, res, next) => {
     try {
 
         const user_id = new mongoose.Types.ObjectId(req.user.sub);
@@ -2120,3 +2173,69 @@ export const publish_listing = async (req, res, next) => {
         next(err);
     }
 };
+
+
+// admin get top listings 
+
+export const get_all_Top_listing = async ( req , res , next  )=>{
+    try {
+        const page = Math.max(Number(req.query.page) || 1, 1);
+        const limit = Math.max(Number(req.query.limit) || 10, 1);
+        const skip = (page - 1) * limit;
+
+        const result = await listingModel.aggregate([
+            {
+                $match: {
+                    status: "active"
+                }
+            },
+            {
+                $lookup: {
+                    from: "listingactivities",
+                    localField: "_id",
+                    foreignField: "listing_id",
+                    as: "activity"
+                }
+            },
+            {
+                $addFields: {
+                    total_views: { $sum: "$activity.view_count" }
+                }
+            },
+            {
+                $match : { 
+                    total_views : { $gt : 0}
+                }
+            },
+            {
+                $sort: { total_views: -1 }
+            },
+            {
+                $skip: skip
+            },
+            {
+                $limit: limit
+            },
+            {
+                $project: {
+                    _id: 0,
+                    listing_id: "$_id",
+                    listing_code: 1,
+                    total_views: 1
+                }
+            }
+        ]);
+
+        const totalListings = await listingModel.countDocuments({ status: "active" });
+        const totalPages = Math.ceil(totalListings / limit);
+        return res.status(200).json({
+            message: "Top listings fetched successfully.",
+            page,
+            totalPages,
+            totalListings,
+            listings: result
+        });
+    }catch ( err ){
+        next ( err );
+    }
+}

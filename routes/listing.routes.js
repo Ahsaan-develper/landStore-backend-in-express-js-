@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { change_listing_status, create_listing, deactivate_listing, get_active_listings, get_all_listings_by_admin, get_all_views_count, get_draft_listings, get_inactive_listings, get_listing_by_radius, get_listing_by_user, get_pending_listings, get_single_listing, get_under_review_listings, make_draft_by_user, publish_listing, search_listings, update_listing } from "../controller/listing.controller.js";
+import { change_listing_status, create_listing, deactivate_listing, get_active_listings, get_all_listings_by_admin, get_all_Top_listing, get_all_views_count, get_draft_listings, get_inactive_listings, get_listing_by_radius, get_listing_by_user, get_pending_listings, get_single_listing, get_under_review_listings, make_draft_by_user, publish_listing, search_listings, update_listing } from "../controller/listing.controller.js";
 import { authorize, optionalAuth, verify_token } from "../middleware/jwt.middleware.js";
 import { upload_listing_to_multer } from "../middleware/multer.middleware.js";
 import { change_listing_status_admin_validator, create_listing_validator, listing_id_validator, listing_page_validator, listing_radius_validator, update_listing_validator } from "../middleware/validators/listing.validator.js";
@@ -37,7 +37,7 @@ listing_router.get("/all_pending" , verify_token , authorize("individual" , "com
 listing_router.get("/all" , verify_token , authorize("super_admin" , "listing_admin"), listing_page_validator , HandleValidationError , get_all_listings_by_admin)
 
 // change status by admin
-listing_router.patch("/status_admin" , verify_token  , authorize("super_admin" , "listing_admin"), change_listing_status_admin_validator , HandleValidationError , change_listing_status)
+listing_router.patch("/status_admin/:listing_id" , verify_token  , authorize("super_admin" , "listing_admin"), change_listing_status_admin_validator , HandleValidationError , change_listing_status)
 
 // apply filters 
 listing_router.get("/search" , search_listings)
@@ -53,7 +53,7 @@ listing_router.get("/single/:id" , optionalAuth , trackVisitor , trackListingVie
 
 
 // delete an listing
-listing_router.delete("/deactived" , verify_token  ,authorize("individual" , "company" , "keporasi")   , deactivate_listing )
+listing_router.delete("/deactived/:id" , verify_token  ,authorize("individual" , "company" , "keporasi") , listing_id_validator, HandleValidationError , deactivate_listing )
 
 
 // update an listing 
@@ -61,3 +61,6 @@ listing_router.patch("/:id" , verify_token  ,authorize("individual" , "company" 
 
 // punlished an listing 
 listing_router.patch("/published/:id" , verify_token  ,authorize("individual" , "company" , "keporasi") , listing_id_validator  , HandleValidationError , publish_listing )
+
+
+listing_router.get("/top_listings" , verify_token  ,authorize("super_admin" , "listing_admin" )  , get_all_Top_listing )

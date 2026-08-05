@@ -42,7 +42,7 @@ export const get_all_notifications = async (req, res, next) => {
                         },
 
                         {
-                            $lookup: {
+                            $lookup: {  
                                 from: "notifications",
                                 localField: "notification_id",
                                 foreignField: "_id",

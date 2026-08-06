@@ -144,13 +144,30 @@ export const listing_page_validator = [
     .trim()
 ]
 
+export const search_listing_validator = [
+    query("state").optional().trim(),
+    query("district").optional().trim(),
+    query("category").optional().trim().isIn(["commercial", "industrial", "residential"]).withMessage("Invalid category"),
+    query("utilization").optional().trim(),
+    query("relation").optional().trim(),
+    query("terrain").optional().trim().isIn(["hilly", "mixed", "flat"]).withMessage("Invalid terrain"),
+    query("deal_type").optional().trim(),
+    query("feature_tag").optional().trim(),
+    query("is_malay_reserve_land").optional().isIn(["true", "false"]).withMessage("Must be true or false"),
+    query("unit").optional().trim().isIn(["sqft", "acres"]).withMessage("Unit must be sqft or acres"),
+    query("min_area").optional().isFloat({ min: 0 }).withMessage("Min area must be a positive number"),
+    query("max_area").optional().isFloat({ min: 0 }).withMessage("Max area must be a positive number"),
+    query("price_sqft").optional().isFloat({ min: 0 }).withMessage("Price per sqft must be a positive number"),
+    query("page").optional().isInt({ min: 1 }).withMessage("Page must be a positive integer"),
+    query("limit").optional().isInt({ min: 1 }).withMessage("Limit must be a positive integer")
+]
+
 export const listing_id_validator = [
     param("id")
     .trim()
     .notEmpty().withMessage(" Listing id is required ")
     .isMongoId().withMessage(" Your id format is not correct ")
 ]
-
 
 
 

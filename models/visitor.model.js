@@ -10,7 +10,6 @@ const visitorSchema = new mongoose.Schema({
       
     },
 
-    // Random UUID stored in HTTP-only cookie
     visitor_token: {
         type: String,
         unique: true,
@@ -18,7 +17,7 @@ const visitorSchema = new mongoose.Schema({
        
     },
 
-    // Browser signature (generated on backend)
+    
     browser_signature: {
         type: String,
         required: true,

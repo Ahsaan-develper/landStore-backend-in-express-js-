@@ -651,14 +651,12 @@ export const update_listing = async (req, res, next) => {
         const { id } = req.params;
         const user_id = req.user.sub;
 
-       
         const existing = await listingModel.findOne({ _id: id, user_id });
         if (!existing) throw new NotFoundError("Listing not found or unauthorized");
 
         const updates        = {};
         const parallelTasks  = {};
 
-        // ── Scalar fields (update only if provided) ───────────────────────
         const SCALAR_FIELDS = [
             "public_description", "unit", "category",
             "relation", "utilization",
@@ -771,17 +769,15 @@ export const update_listing = async (req, res, next) => {
             );
         }
 
-        // ── Media (images / geran docs) ───────────────────────────────────
-       // ── Media (replace old → upload new, scoped per type) ────────────────────────
+
 const new_images = req.files?.property_images || [];
 const new_docs   = req.files?.geran_doc       || [];
 
 if (new_images.length || new_docs.length) {
 
-    // 1. Fetch the existing media doc to know which public_ids to delete
+    
     const existing_media = await mediaModel.findById(existing.media_id?.[0]);
 
-    // Separate stored entries by type so we only touch what's being replaced
     const stored = (existing_media?.media_type || []).reduce(
         (acc, type, i) => {
             acc[type].push({
@@ -806,10 +802,10 @@ if (new_images.length || new_docs.length) {
             ? upload_files_to_cloudinary(new_images, "listings/images")            : [],
         new_docs.length
             ? upload_files_to_cloudinary(new_docs,   "listings/geran/documents")   : [],
-        delete_files_from_cloudinary(to_delete_pids),   // fire & don't wait separately
+        delete_files_from_cloudinary(to_delete_pids),
     ]);
 
-    // 4. Merge: keep untouched type, replace the updated type
+  
     const final = {
         images : new_images.length
             ? image_uploads.map((r, i) => ({
@@ -843,7 +839,6 @@ if (new_images.length || new_docs.length) {
     );
 }
 
-        // ── Run all parallel updates + listing scalar update ───────────────
         await Promise.all(Object.values(parallelTasks));
 
         if (!Object.keys(updates).length && !Object.keys(parallelTasks).length)
@@ -888,17 +883,17 @@ if (new_images.length || new_docs.length) {
 };
 
 
-// // ── constants ─────────────────────────────────────────────────────────────────
+// // ── constants
 const SQM_TO_SQFT = 10.7639;
 
-// ── price calculator ──────────────────────────────────────────────────────────
+// ── price calculator 
 const calculate_total_price = (price_sqft, area, unit) => {
     const area_in_sqft = unit === "sqm" ? area * SQM_TO_SQFT : area;
     return parseFloat((price_sqft * area_in_sqft).toFixed(2));
 };
 
 const format_listing = (listing) => {
-    // Thumbnail → first image entry in media doc
+    
     const media       = listing.media_id?.[0];
     const thumb_index = media?.media_type?.findIndex(t => t === "image") ?? -1;
     const thumbnail   = thumb_index !== -1 ? media?.media_url?.[thumb_index] : null;
@@ -919,14 +914,14 @@ const format_listing = (listing) => {
                                 listing.price_sqft,
                                 listing.area,
                                 listing.unit
-                               ),
+                            ),
         thumbnail,
         deal_types           : listing.deal_type_id?.[0]?.name   ?? [],
         feature_tags         : listing.feature_tags_id?.[0]?.tag  ?? [],
     };
 };
 
-// // ── shared DB helper ──────────────────────────────────────────────────────────
+// // ── shared DB helper 
 const get_listings_by_status = async (user_id, status, page, limit) => {
     const skip = (page - 1) * limit;
 
@@ -956,7 +951,7 @@ const get_listings_by_status = async (user_id, status, page, limit) => {
     };
 };
 
-// ── 1. Drafts ─────────────────────────────────────────────────────────────────
+// ── 1. Drafts
 export const get_draft_listings = async (req, res, next) => {
     try {
         const user_id = req.user.sub;
@@ -977,7 +972,7 @@ export const get_under_review_listings = async (req, res, next) => {
     } catch (err) { console.error(err); next(err); }
 };
 
-// ── 3. Pending ────────────────────────────────────────────────────────────────
+// ── 3. Pending
 export const get_pending_listings = async (req, res, next) => {
     try {
         const user_id = req.user.sub;
@@ -988,7 +983,6 @@ export const get_pending_listings = async (req, res, next) => {
     } catch (err) { console.error(err); next(err); }
 };
 
-// ── 4. Inactive ───────────────────────────────────────────────────────────────
 export const get_inactive_listings = async (req, res, next) => {
     try {
         const user_id = req.user.sub;
@@ -999,7 +993,7 @@ export const get_inactive_listings = async (req, res, next) => {
     } catch (err) { console.error(err); next(err); }
 };
 
-// ── 5. Active ─────────────────────────────────────────────────────────────────
+
 export const get_active_listings = async (req, res, next) => {
     try {
         const user_id = req.user.sub;
@@ -1010,10 +1004,11 @@ export const get_active_listings = async (req, res, next) => {
     } catch (err) { console.error(err); next(err); }
 };
 
+
 export const search_listings = async (req, res, next) => {
     try {
         const page  = Math.max(Number(req.query.page)  || 1,  1);
-               const limit = Math.max(Number(req.query.limit) || 10, 1);
+        const limit = Math.max(Number(req.query.limit) || 10, 1);
         const skip  = (page - 1) * limit;
 
         const {
@@ -1032,16 +1027,19 @@ export const search_listings = async (req, res, next) => {
             state_ids = states.map(s => String(s._id));
         }
 
-        if (district) {
-            const districts = await districtModel.find({ district: district.trim() }, "state_id").lean();
-            const ids = districts.map(d => String(d.state_id));
+if (district) {
+    const districts = await districtModel
+        .find({ district: district.trim() }, "state_id")
+        .lean();
 
-            state_ids = state_ids === null
-                ? ids
-                : state_ids.filter(id => ids.includes(id));   // AND of both
-        }
+    const districtStateIds = districts.map(d => String(d.state_id));
 
-        if (state_ids !== null) filter.state_id = { $in: state_ids };
+    state_ids = state_ids.filter(id => districtStateIds.includes(id));
+}
+
+if (state_ids?.length) {
+    filter.state_id = { $in: state_ids };
+}
 
         if (deal_type) {
             const docs = await dealTypeModel.find({ name: deal_type.trim() }, "_id").lean();
@@ -1120,10 +1118,10 @@ if (price_sqft) {
                 area                 : listing.area,
                 price_sqft           : listing.price_sqft,
                 total_price          : calculate_total_price(
-                                           listing.price_sqft,
-                                           listing.area,
-                                           listing.unit
-                                       ),
+                                        listing.price_sqft,
+                                        listing.area,
+                                        listing.unit
+                                    ),
                 createdAt            : listing.createdAt,
                 state                : listing.state_id?.state ?? null,
                 district             : district_by_state[String(listing.state_id?._id)] ?? null,
@@ -1159,19 +1157,6 @@ if (price_sqft) {
     }
 };
 
-// const send_empty = (res, page, limit) => {
-//     return res.status(200).json({
-//         success: true,
-//         message: "No listings found.",
-//         data: [],
-//         pagination: {
-//             currentPage: page, totalPages: 0,
-//             totalListings: 0,  perPage: limit,
-//             hasNextPage: false, hasPreviousPage: false
-//         }
-//     });
-// };
-// get all listings by admin
 
 export const get_all_listings_by_admin = async (req, res, next) => {
     try {
@@ -1290,6 +1275,8 @@ export const change_listing_status = async (req, res, next) => {
     try {
         const { status } = req.body;
         const { listing_id } = req.params;
+        const oldStatuss = await listingModel.findById(listing_id, "status").lean();
+        const oldStatus = oldStatuss.status;
 
         const listing = await listingModel.findByIdAndUpdate(
             listing_id,
@@ -1304,14 +1291,21 @@ export const change_listing_status = async (req, res, next) => {
             }
         );
 
-        if (!listing) {
-            throw new NotFoundError("Listing not found.");
-        }
-
+        const [state, district] = await Promise.all([
+            stateModel.findById(listing.state_id, "state").lean(),
+            districtModel.findOne({ state_id: listing.state_id }, "district").lean()
+        ]);
+        const stateName= state.state;
+        const districtName= district.district;
+      
+        
         const { title , message} =NotificationTemplates.listingStatusChanged({
             listingCode : listing.listing_code,
-            newStatus :status
-        })
+            state : stateName,
+            district : districtName,
+            oldStatus : oldStatus,
+            newStatus : status
+        });
         await createNotification({
 
     user_id: listing.user_id,

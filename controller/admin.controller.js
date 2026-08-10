@@ -10,6 +10,8 @@ import companyDetailsModel from "../models/companyDetails.model.js";
 import keporasiDetailModel from "../models/keporasiDetail.model.js";
 import { NotificationTemplates } from "../template/notification.template.js";
 import { createNotification } from "../services/notification.service.js";
+
+// register super admin
 export const super_admin_register = async (req, res, next) => {
     try {
         const { fullname, email, password } = req.body;
@@ -18,10 +20,11 @@ export const super_admin_register = async (req, res, next) => {
             .findOne({ email })
             .select("_id status")
             .lean();
-
+        
         if (existing_user) {
-            const existing_admin = await adminModel.findOne({ user_id }).select("_id admin_role").lean();
-            if( existing_admin.admin_role === "super_admin") throw new ConflictError(" Super admin already create with this email ");
+            const existing_admin = await adminModel.findOne({ user_id: existing_user._id }).select("_id admin_role").lean();
+            
+            if( existing_admin?.admin_role === "super_admin") throw new ConflictError(" Super admin already create with this email ");
             const admin = await adminModel.create({
                 user_id    : existing_user._id,
                 admin_role : "super_admin",
@@ -37,7 +40,7 @@ export const super_admin_register = async (req, res, next) => {
             });
         }
 
-        // email not exist — create both user and admin
+        
         const [hashed_password, user_id, user_code] = await Promise.all([
             bcrypt.hash(password, 10),
             Promise.resolve(new mongoose.Types.ObjectId()),

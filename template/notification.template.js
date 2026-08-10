@@ -22,7 +22,7 @@ export const NotificationTemplates = {
     }) {
         return {
             title: "Action Needed",
-            message: `Your listing  (Code: ${listingCode}) status changed  to ${newStatus}.`
+            message: `Your listing ${district}, ${state} (Code: ${listingCode}) status changed from ${oldStatus} to ${newStatus}.`
         };
     },
 

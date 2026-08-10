@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const visitorSchema = new mongoose.Schema({
 
-    // Linked after login
+  
     user_id: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",

@@ -11,4 +11,5 @@ export const _config = {
     CLOUDINARY_NAME : process.env.CLOUDINARY_NAME,
     ACCESS_TOKEN : process.env.ACCESS_TOKEN,
     REFRESH_TOKEN : process.env.REFRESH_TOKEN,
+    RESEND_API_KEY :  process.env.RESEND_API_KEY
 }

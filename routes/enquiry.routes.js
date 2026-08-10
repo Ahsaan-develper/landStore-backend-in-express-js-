@@ -13,6 +13,7 @@ enquiry_router.post("/" , verify_token , authorize("individual" , "company" , "k
 // get all user enquiry 
 enquiry_router.get("/all_enquiry" , verify_token , authorize("individual" , "company" , "keporasi")  , get_all_enquiry)
 
+
 enquiry_router.get("/all_enquiry_admin" , verify_token , authorize("super_admin" , "enquiry_admin")  , get_all_enquiry_by_admin)
 
 // change status

@@ -11,7 +11,7 @@ export const user_register_validator = [
     .trim()
     .notEmpty().withMessage("Please enter your email").bail()
     .isEmail().withMessage("Email format not correct ").bail()
-    .isLength({min : 13 , max : 50}).withMessage(" Email characters length must between 13 to 50 "),
+    .isLength({min : 6 }).withMessage(" Email characters length must greater than 6 "),
 
     body("password")
     .trim()
@@ -61,7 +61,7 @@ export const user_login_validator = [
     .trim()
     .notEmpty().withMessage("Please enter your email").bail()
     .isEmail().withMessage("Email format not correct ").bail()
-    .isLength({min : 13 , max : 50}).withMessage(" Email characters length must between 13 to 50 "),
+    .isLength({min : 6 }).withMessage(" Email characters length must greater than 6 "),
 
     body("password")
     .trim()

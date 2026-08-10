@@ -31,7 +31,6 @@ export async function trackVisitor(req, res, next) {
 
     try {
 
-        // Logged in user → no anonymous visitor tracking needed
         if (req.user) {
             return next();
         }
@@ -164,66 +163,69 @@ export async function trackVisitor(req, res, next) {
 
 
 const FIVE_HOURS = 1000 * 60 * 60 * 5;
+import listingModel from "../models/listing.model.js";
 
 export const trackListingView = async (req, res, next) => {
     try {
-
         const { id: listing_id } = req.params;
 
         if (!mongoose.Types.ObjectId.isValid(listing_id)) {
             return next();
         }
 
+        // Get the listing
+        const listing = await listingModel.findById(
+            listing_id,
+            "status user_id"
+        ).lean();
+
+        if (!listing) {
+            return next();
+        }
+
+        if (listing.status !== "active") {
+            return next();
+        }
+
+        if (
+            req.user &&
+            String(listing.user_id) === String(req.user.sub)
+        ) {
+            return next();
+        }
+
         let filter;
 
-        // Logged in user
         if (req.user) {
-
             filter = {
                 listing_id,
-                user_id: req.user.sub
+                user_id: req.user.sub,
             };
-
-        }
-        // Visitor
-        else {
-
+        } else {
             if (!req.visitor) {
                 return next();
             }
 
             filter = {
                 listing_id,
-                visitor_id: req.visitor._id
+                visitor_id: req.visitor._id,
             };
-
         }
 
         let activity = await listingActivityModel.findOne(filter);
 
-        // First view
         if (!activity) {
-
             activity = await listingActivityModel.create({
-
                 listing_id,
-
                 user_id: req.user ? req.user.sub : null,
-
                 visitor_id: req.user ? null : req.visitor._id,
-
                 view_count: 1,
-
                 click_count: 0,
-
-                last_viewed_at: new Date()
-
+                last_viewed_at: new Date(),
             });
 
             req.listingActivity = activity;
-
             return next();
-
         }
 
         const now = Date.now();
@@ -233,30 +235,19 @@ export const trackListingView = async (req, res, next) => {
             now - activity.last_viewed_at.getTime() >= FIVE_HOURS;
 
         if (shouldIncreaseView) {
-
             activity.view_count += 1;
-
             activity.last_viewed_at = new Date();
-
             await activity.save();
-
         }
 
         req.listingActivity = activity;
 
         next();
-
     } catch (err) {
-
         console.error("[trackListingView]", err);
-
         next(err);
-
     }
-
 };
-
-
 
 export const trackListingClick = async (req, res, next) => {
     try {
@@ -266,6 +257,26 @@ export const trackListingClick = async (req, res, next) => {
         if (!mongoose.Types.ObjectId.isValid(listing_id)) {
             return next();
         }
+ const listing = await listingModel.findById(
+            listing_id,
+            "status user_id"
+        ).lean();
+
+        if (!listing) {
+            return next();
+        }
+
+        if (listing.status !== "active") {
+            return next();
+        }
+
+        if (
+            req.user &&
+            String(listing.user_id) === String(req.user.sub)
+        ) {
+            return next();
+        }
+
 
         let filter;
 
@@ -286,6 +297,8 @@ export const trackListingClick = async (req, res, next) => {
             };
 
         }
+
+        
 
         let activity = await listingActivityModel.findOne(filter);
 

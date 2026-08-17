@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 const menu_schema = new mongoose.Schema({
     menu : { type : String , required : true },
+    menu_name : { type : String , required : true },
     menu_color : { type : String , required : true },
     menu_alignment : { type : String , required : true },
     link : { type : String , required : true },

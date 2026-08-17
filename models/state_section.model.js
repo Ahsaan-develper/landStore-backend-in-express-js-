@@ -9,5 +9,4 @@ const state_section_schema = new mongoose.Schema({
     
 }, { timestamps : true })
 
-
 export default mongoose.model("StateSection" , state_section_schema)

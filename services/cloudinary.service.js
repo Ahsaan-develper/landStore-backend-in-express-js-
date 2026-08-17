@@ -1,7 +1,7 @@
 import cloudinary from "../config/cloudinary.js";
 
-const CHUNK_SIZE = 2 * 1024 * 1024; 
-
+const CHUNK_SIZE = 20 * 1024 * 1024; 
+const  CHUNKED_THRESHOLD = 20 * 1024 * 1024;
 export const get_media_type = (format) => {
     const images = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
     const videos = ['mp4', 'mkv', 'avi', 'mov'];
@@ -10,24 +10,34 @@ export const get_media_type = (format) => {
     return 'document';
 };
 
+
+
 export const upload_file = (file_buffer, folder) => {
     return new Promise((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_chunked_stream(
-            {
-                folder,
-                resource_type : 'auto',
-                chunk_size    : CHUNK_SIZE
-            },
-            (error, result) => {
-                if (error) return reject(error);
-                resolve({
-                    url       : result.secure_url,
-                    public_id : result.public_id,
-                    format    : result.format,
-                    size      : result.bytes
-                });
-            }
-        );
+
+        const callback = (error, result) => {
+            if (error) return reject(error);
+            resolve({
+                url       : result.secure_url,
+                public_id : result.public_id,
+                format    : result.format,
+                size      : result.bytes
+            });
+        };
+
+        const options = {
+            folder,
+            resource_type : "auto",
+        };
+
+        const stream = file_buffer.length > CHUNKED_THRESHOLD
+            ? cloudinary.uploader.upload_chunked_stream(
+                { ...options, chunk_size: CHUNK_SIZE }, callback
+              )
+            : cloudinary.uploader.upload_stream(
+                options, callback
+              );
+
         stream.end(file_buffer);
     });
 };

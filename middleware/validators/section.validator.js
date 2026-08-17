@@ -56,6 +56,16 @@ export const section_id_validator = [
 ]
 
 
+export const card_style_validator =[
+    body("background_color")
+    .trim()
+    .notEmpty().withMessage("Please enter background color code  "),
+
+    body("border_color")
+    .trim()
+    .notEmpty().withMessage("Please enter button border color  "),
+]
+
 export const create_button_validator = [
     body("button_text")
     .trim()
@@ -81,7 +91,15 @@ export const create_button_validator = [
 
 
 export const create_statistic_content_validator =[
-    body("heading")
+
+    body("card_gap")
+    .trim()
+    .notEmpty().withMessage("Please enter card gap "),
+]
+
+
+export const card_data_validator =[
+     body("heading")
     .trim()
     .notEmpty().withMessage("Please enter heading text  "),
 
@@ -107,7 +125,156 @@ export const create_statistic_content_validator =[
     .notEmpty().withMessage(" Please enter description alignment ").bail()
     .isIn(["center" , "left" ,"right"]),
 
-    body("card_gap")
+    body("sub_heading")
+    .optional()
+    .custom((value, { req }) => {
+    const {
+        sub_heading,
+        sub_heading_color,
+        sub_heading_alignment
+    } = req.body;
+
+    
+    if (!sub_heading && !sub_heading_color && !sub_heading_alignment) {
+        return true;
+    }
+
+    if (!sub_heading || !sub_heading_color || !sub_heading_alignment) {
+        throw new Error(
+            "sub_heading, sub_heading_color and sub_heading_alignment are all required"
+        );
+    }
+
+    if (!["center", "left", "right"].includes(sub_heading_alignment)) {
+        throw new Error(
+            "Sub heading alignment must be center, left or right"
+        );
+    }
+
+    return true;
+}),
+]
+
+
+export const  create_statistic_card_validator = [
+    body("card_name")
     .trim()
-    .notEmpty().withMessage("Please enter card gap "),
+    .notEmpty().withMessage("Please enter card Name "),
+]
+
+export const  create_news_category_validator = [
+    body("category_name")
+    .trim()
+    .notEmpty().withMessage("Please enter category Name "),
+]
+export const section_query_id_validator = [
+    query("id")
+    .trim()
+    .notEmpty().withMessage("Please enter id ").bail()
+    .isMongoId().withMessage("Id format not correct ")
+]
+
+export const create_testimonial_card_validator = [
+    body("testimonial_name")
+    .trim()
+    .notEmpty("Please enter testimonial name "),
+
+    body("testimonial")
+    .trim()
+    .notEmpty().withMessage(" Please enter testimonial "),
+
+    body("testimonial_color")
+    .trim()
+    .notEmpty().withMessage(" Please enter testimonial color"),
+
+    body("testimonial_alignment")
+    .trim()
+    .notEmpty().withMessage(" Please enter testimonial alignment "),
+
+    body("customer")
+    .trim()
+    .notEmpty().withMessage(" Please enter customer "),
+
+    body("customer_color")
+    .trim()
+    .notEmpty().withMessage(" Please enter customer color  "),
+
+    body("customer_alignment")
+    .trim()
+    .notEmpty().withMessage(" Please enter customer alignment  "),
+    
+    body("username")
+    .trim()
+    .notEmpty().withMessage(" Please enter username  "),
+
+    body("username_color")
+    .trim()
+    .notEmpty().withMessage(" Please enter username  color "),
+
+    body("username_alignment")
+    .trim()
+    .notEmpty().withMessage(" Please enter username  alignment"),
+]
+
+
+
+
+export const  create_menu_card_validator = [
+    body("menu_name")
+    .trim()
+    .notEmpty().withMessage("Please enter menu card Name "),
+
+    body("menu")
+    .trim()
+    .notEmpty().withMessage("Please enter menu  "),
+
+    body("menu_color")
+    .trim()
+    .notEmpty().withMessage("Please enter menu color "),
+
+    body("menu_alignment")
+    .trim()
+    .notEmpty().withMessage("Please enter menu alignment ").bail()
+    .isIn(["center" , "left" , "right"]).withMessage("Please enter just center , left or right "),
+
+    body("link")
+    .trim()
+    .notEmpty().withMessage("Please enter menu card link "),
+]
+
+
+export const news_card_validator = [
+    body("link")
+    .trim()
+    .notEmpty().withMessage("Please enter link "),
+
+    body("link_color")
+    .trim()
+    .notEmpty().withMessage("Please enter link color"),
+
+    body("link_alignment")
+    .trim()
+    .notEmpty().withMessage("Please enter link alignment "),
+
+   body("date")
+    .trim()
+    .matches(/^\d{1,2}\s(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s\d{4}$/i)
+    .withMessage("Date must be in format: 16 Dec 2026")
+    .custom(value => {
+        const parsed = new Date(value);
+
+        if (isNaN(parsed.getTime())) {
+            throw new Error("Invalid date value");
+        }
+
+        return true;
+    }),
+
+    body("date_color")
+    .trim()
+    .notEmpty().withMessage("Please enter date color "),
+
+    body("date_alignment")
+    .trim()
+    .notEmpty().withMessage("Please enter date alignment "),
 ]

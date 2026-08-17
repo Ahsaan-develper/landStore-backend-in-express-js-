@@ -7,5 +7,5 @@ const button_style_schema = new mongoose.Schema({
     state_section_id : { type : mongoose.Schema.Types.ObjectId , required : true , ref : "StateSection"},
     style_id : { type : mongoose.Schema.Types.ObjectId , required : true , ref : "Style"},
 } , { timestamps : true })
-
+button_style_schema.index({ state_section_id : 1 } , { unique : true  });
 export default mongoose.model("ButtonStyle" ,button_style_schema )

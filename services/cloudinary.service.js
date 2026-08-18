@@ -49,7 +49,7 @@ export const upload_files_to_cloudinary = (files, folder) => {
 };
 
 export const delete_file = (public_id) => {
-    return cloudinary.uploader.destroy(public_id, { resource_type: 'image' });
+    return cloudinary.uploader.destroy(public_id, { resource_type: "raw" });
 };
 
 export const delete_files_from_cloudinary = (public_ids) => {

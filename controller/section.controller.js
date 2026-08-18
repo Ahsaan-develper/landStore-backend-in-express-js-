@@ -10,11 +10,12 @@ import card_dataModel from "../models/card_data.model.js";
 import card_iconModel from "../models/card_icon.model.js";
 import cardModel from "../models/card.model.js";
 import testimonialModel from "../models/testimonial.model.js";
-import { get_media_type, upload_file } from "../services/cloudinary.service.js";
+import { delete_file, get_media_type, upload_file } from "../services/cloudinary.service.js";
 import mediaModel from "../models/media.model.js";
 import menuModel from "../models/menu.model.js";
 import cardCategoryModel from "../models/cardCategory.model.js";
 import cardMetaDataModel from "../models/cardMetaData.model.js";
+import { ReturnDocument } from "mongodb";
 
 
 // create section 
@@ -1326,9 +1327,9 @@ export const single_news_category_all_cards = async ( req , res , next )=>{
 export const create_news = async ( req , res , next )=>{
     try {
         const { section_id } = req.params ;
-        const {card_name , tag ,heading , heading_color , heading_alignment , description ,  description_alignment, description_color , link , link_color , link_alignment , date , date_color , date_alignment , top , left , bottom , right , border_color , background_color }= req.body;
-        const is_exist_card = await cardModel.findOne({ card_name}).select("card_name").lean();
-        if ( is_exist_card ) throw new ConflictError(" News card with this name already exist ");
+        const {card_name , tag , heading , heading_color , heading_alignment , description ,  description_alignment, description_color , link , link_color , link_alignment , date , date_color , date_alignment , top , left , bottom , right , border_color , background_color }= req.body;
+        const is_exist_card = await cardModel.findOne({   card_name, card_category_id: new mongoose.Types.ObjectId(section_id)}).select("card_name card_category_id").lean();
+        if ( is_exist_card  ) throw new ConflictError(" News card with this name already exist ");
         let media ;
         if ( req.file ){
             let data = await upload_file(req.file.buffer , "news");
@@ -1437,32 +1438,24 @@ export const get_single_news_detail = async ( req , res , next )=>{
             {
                 $unwind : { path : "$media" , preserveNullAndEmptyArrays : true }
             },
-            {
-                $project : {
-                    _id : 1 ,
-                    card_name : 1 ,
-                    createdAt : 1 ,
-                    media : {
-                        media_url : 1 
-                    },
-                    style : {
-                        padding : {
-                            top : 1 , left : 1 , right : 1 , bottom : 1 
-                        },
-                        border_color : 1 ,
-                        background_color : 1 
-                    },
-                    cardmeta : {
-                        link : 1 ,
-                        link_color : 1 ,
-                        link_alignment : 1 ,
-                        date : 1 ,
-                        date_color : 1 ,
-                        date_alignment : 1 ,
-                        tag : 1 ,
-                    }
-                }
-            }
+        {
+    $project: {
+        _id: 1,
+        card_name: 1,
+        createdAt: 1,        
+        image: "$media.media_url",
+        heading: "$card_data.heading",
+        description: "$card_data.description",
+        style: {
+            border_color: "$style.border_color",
+            background_color: "$style.background_color",
+            padding: "$style.padding"
+        },
+        link: "$meta.link",
+        date: "$meta.date",
+        tag:  "$meta.tag",
+    }
+}
         ]);
         if ( !news_detail ) throw new NotFoundError("News not found ");
 
@@ -1477,218 +1470,177 @@ export const get_single_news_detail = async ( req , res , next )=>{
 
 
 // get all news data 
-
-export const get_news_section = async (req, res, next) => {
+export const get_news_section_user = async (req, res, next) => {
     try {
-        const { id } = req.query;
-        const page = Math.max(Number(req.query.page) || 1,1 );
-        const limit = Math.max(Number(req.query.limit) || 10,1 );
-        const skip = (Number(page) -1 ) * limit ;
-        const news_content = await contentModel.aggregate([
-            {
-                $match : {
-                    $and : [
-                        {
-                            state_section_id :  new mongoose.Types.ObjectId(id) 
-                        },
-                        {
-                            status : "active"
+        const { section_id } = req.params;
+        const page  = Math.max(Number(req.query.page)  || 1,  1);
+        const limit = Math.max(Number(req.query.limit) || 10, 1);
+        const skip  = (page - 1) * limit;
 
-                        }
-                    ]
+        const result = await contentModel.aggregate([
+            {
+                $match: {
+                    state_section_id: new mongoose.Types.ObjectId(section_id)
                 }
             },
+
             {
-                $lookup  : {
+                $lookup: {
                     from: "carddatas",
                     localField: "card_data_id",
                     foreignField: "_id",
                     as: "card_data"
                 }
             },
+            { $unwind: { path: "$card_data", preserveNullAndEmptyArrays: true } },
+
+            // 3. Get categories
             {
-                $unwind: {
-                    path: "$card_data",
-                    preserveNullAndEmptyArrays: true
+                $lookup: {
+                    from: "cardcategories",
+                    localField: "_id",
+                    foreignField: "content_id",
+                    as: "categories"
                 }
             },
+
+            
+            { $unwind: { path: "$categories", preserveNullAndEmptyArrays: true } },
+
+            
             {
-                $lookup : {
-                    from : "cardcategories",
-                    let : { contentId : "$_id"},
-                    
-                    pipeline : [
+                $lookup: {
+                    from: "cardstyles",
+                    let: { categoryId: "$categories._id" },
+                    pipeline: [
                         {
-                            $match : {
-                                $expr : {
-                                    $eq : [
-                                        "$content_id",
-                                        "$$contentId"
-                                    ]
-                                }
+                            $match: {
+                                $expr: { $eq: ["$card_category_id", "$$categoryId"] }
                             }
                         },
+                        // Card style → media
                         {
-                            $lookup : {
-                                from : "cardstyles",
-                                let : {
-                                    categoryId : "$_id"
+                            $lookup: {
+                                from: "media",
+                                localField: "media_id",
+                                foreignField: "_id",
+                                as: "media"
+                            }
+                        },
+                        { $unwind: { path: "$media", preserveNullAndEmptyArrays: true } },
+
+                        // Card style → card_data (heading, description)
+                        {
+                            $lookup: {
+                                from: "carddatas",
+                                localField: "card_data_id",
+                                foreignField: "_id",
+                                as: "card_data"
+                            }
+                        },
+                        { $unwind: { path: "$card_data", preserveNullAndEmptyArrays: true } },
+
+                        // Card style → style
+                        {
+                            $lookup: {
+                                from: "styles",
+                                localField: "style_id",
+                                foreignField: "_id",
+                                as: "style"
+                            }
+                        },
+                        { $unwind: { path: "$style", preserveNullAndEmptyArrays: true } },
+
+                        // Card style → meta (link, date, tag)
+                        {
+                            $lookup: {
+                                from: "cardmetas",
+                                localField: "_id",
+                                foreignField: "card_id",
+                                as: "meta"
+                            }
+                        },
+                        { $unwind: { path: "$meta", preserveNullAndEmptyArrays: true } },
+
+                        
+
+                        
+                        {
+                            $project: {
+                                _id: 1,
+                                card_name: 1,
+                                createdAt: 1, 
+                                image: "$media.media_url",
+                                heading: "$card_data.heading",
+                                description: "$card_data.description",
+                                style: {
+                                    border_color: "$style.border_color",
+                                    background_color: "$style.background_color",
+                                    padding: "$style.padding"
                                 },
-                                pipeline : [
-                                    {
-                                        $match : {
-                                            $expr : {
-                                                $eq : [
-                                                    "$card_category_id",
-                                                    "$$categoryId"
-                                                ]
-                                            }
-                                        }
-                                    },
-
-                                    {
-                                        $lookup: {
-                                            from: "styles",
-                                            localField: "style_id",
-                                            foreignField: "_id",
-                                            as: "style"
-                                        }
-                                    },
-
-                                    {
-                                        $unwind: {
-                                            path: "$style",
-                                            preserveNullAndEmptyArrays: true
-                                        }
-                                    },
-                                    {
-                                        $lookup: {
-                                            from: "media",
-                                            localField: "media_id",
-                                            foreignField: "_id",
-                                            as: "media"
-                                        }
-                                    },
-
-                                    {
-                                        $unwind: {
-                                            path: "$media",
-                                            preserveNullAndEmptyArrays: true
-                                        }
-                                    },
-                                    {
-                                        $lookup: {
-                                            from: "carddatas",
-                                            localField: "card_data_id",
-                                            foreignField: "_id",
-                                            as: "card_data"
-                                        }
-                                    },
-                                    {
-                                        $unwind: {
-                                            path: "$card_data",
-                                            preserveNullAndEmptyArrays: true
-                                        }
-                                    },
-                                    {
-                                        $lookup: {
-                                            from: "cardmetas",
-                                            localField: "_id",
-                                            foreignField: "card_id",
-                                            as: "meta_data"
-                                        }
-                                    },
-                                    {
-                                        $unwind : { path : "$meta_data" , preserveNullAndEmptyArrays : true}
-                                    },
-                                    {
-                                        $sort: {
-                                            createdAt: -1
-                                        }
-                                    },
-                                    {
-                                        $skip: skip
-                                    },
-                                    {
-                                        $limit: limit
-                                    },
-                                    {
-                                        $project : {
-                                            card_name : 1 ,
-                                            createdAt : 1 ,
-                                            media : {
-                                                media_url : 1,
-                                                public_id : 1
-                                            },
-                                            style : {
-                                                border_color : 1 ,
-                                                background_color : 1 ,
-                                                padding : {
-                                                    top : 1,  bottom : 1 , left : 1 , right : 1
-                                                }
-                                            },
-                                            card_data :{
-                                                heading : 1 ,
-                                                heading_color : 1 ,
-                                                heading_description : 1 ,
-                                                description : 1 ,
-                                                description_alignment :1 ,
-                                                description_color : 1 
-                                            },
-                                            meta_data : {
-                                                link : 1 ,
-                                                link_color : 1 ,
-                                                link_alignment :  1,
-                                                tag :  1 ,
-                                                date : 1 ,
-                                                date_color : 1 ,
-                                                date_alignment : 1 
-                                            }
-
-                                        }
-                                    }
-                                ],
-                                as : "cards"
+                                link: "$meta.link",
+                                date: "$meta.date",
+                                tag:  "$meta.tag",
                             }
                         }
                     ],
-                    as : "categories"
+                    as: "categories.cards"
                 }
             },
+
+            
             {
-                $project: {
-                    _id: 1,
-                    card_gap: 1,
-
-                    card_data: {
-                        heading: 1,
-                        heading_color: 1,
-                        heading_alignment: 1,
-                        description: 1,
-                        description_color: 1,
-                        description_alignment: 1
-                    },
-
+                $group: {
+                    _id: "$_id",
+                    card_gap: { $first: "$card_gap" },
+                    card_data: { $first: "$card_data" },
                     categories: {
-                        _id: 1,
-                        category_name: 1,
-                        cards: 1
+                        $push: {
+                            category_name: "$categories.category_name",
+                            cards: "$categories.cards"
+                        }
                     }
                 }
             }
-        ])
+        ]);
 
-        if ( news_content ) throw new NotFoundError("News Content not found ")
+        if (!result || result.length === 0)
+            throw new NotFoundError("News section not found");
+
+        const section = result[0];
+
+        
+        const all_cards = section.categories
+    .flatMap(cat =>
+        (cat.cards || []).map(card => ({
+            ...card,
+            category: cat.category_name
+        }))
+    )
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); 
+
+const total       = all_cards.length;
+const paged_cards = all_cards.slice(skip, skip + limit);
+
         res.status(200).json({
-            news_content
+            section: {
+                heading:     section.card_data?.heading,
+                description: section.card_data?.description,
+                card_gap:    section.card_gap
+            },
+            cards: paged_cards,
+            pagination: {
+                page,
+                limit,
+                total,
+                total_pages: Math.ceil(total / limit)
+            }
         });
 
     } catch (err) {
         next(err);
     }
 };
-
-
 /////////////////////////////// editing part start here /////////////////////////////////
 
 export const section_active_inactive = async ( req , res , next )=>{
@@ -1726,3 +1678,353 @@ export const section_active_inactive = async ( req , res , next )=>{
         next ( err );
     }
 }
+
+// update state sections data 
+    export const state_container_data_updated = async ( req , res , next )=>{
+        try {
+            const { section_id } = req.params;
+            const { container_alignment, background_color , top , left , bottom , right } = req.body ;
+             const container_update = {};
+        const style_update = {
+            padding : {}
+        };
+
+
+            if ( container_alignment ){
+                container_update.alignment = container_alignment;
+            }
+
+            if ( background_color ){
+                style_update.background_color = background_color;
+            }
+
+            if ( top ){
+                style_update.padding.top = top;
+            }
+            if ( bottom ){
+                style_update.padding.bottom = bottom;
+            }
+            if ( left ){
+                style_update.padding.left = left;
+            }
+            if ( right ){
+                style_update.padding.right = right;
+            };
+
+           
+            const updated_data = await containerModel.findByIdAndUpdate( 
+                section_id  , 
+                {
+                    $set : container_update
+                },
+                {
+                    returnDocument: "after"
+                }
+            )
+
+            if (!updated_data) {
+    throw new NotFoundError("Container not found");
+}
+
+            const updated_style  = await styleModel.findByIdAndUpdate(
+                updated_data.style_id  ,
+                {
+                    $set : style_update
+                },
+                {
+                    returnDocument: "after"
+                }
+            )
+
+            if ( !updated_style ) throw new NotFoundError(" Style not found ")
+
+            res.status(200).json({
+                updated_data,
+                updated_style
+            })
+
+        }catch ( err ){
+            next ( err );
+        }
+    }
+
+// update an button data 
+export const update_button = async (req, res, next) => {
+    try {
+        const { section_id } = req.params;
+
+        const {
+            background_color,
+            top,
+            left,
+            right,
+            bottom,
+            button_link,
+            button_text,
+            border_color,
+            text_color
+        } = req.body;
+
+        const button_update = {};
+        const style_update = {};
+
+        
+        if (button_text !== undefined) {
+            button_update.button_text = button_text;
+        }
+
+        if (button_link !== undefined) {
+            button_update.button_link = button_link;
+        }
+
+        
+        if (background_color !== undefined) {
+            style_update.background_color = background_color;
+        }
+
+        if (border_color !== undefined) {
+            style_update.border_color = border_color;
+        }
+
+        if (text_color !== undefined) {
+            style_update.text_color = text_color;
+        }
+
+        if (top !== undefined) {
+            style_update["padding.top"] = top;
+        }
+
+        if (left !== undefined) {
+            style_update["padding.left"] = left;
+        }
+
+        if (right !== undefined) {
+            style_update["padding.right"] = right;
+        }
+
+        if (bottom !== undefined) {
+            style_update["padding.bottom"] = bottom;
+        }
+
+        // Update button
+        const updated_button = await buttonModel.findByIdAndUpdate(
+            section_id,
+            {
+                $set: button_update
+            },
+            {
+                returnDocument: "after"
+            }
+        );
+
+        if (!updated_button) {
+            throw new NotFoundError("Button not found");
+        }
+
+        let updated_style = null;
+
+        if (Object.keys(style_update).length > 0) {
+            updated_style = await styleModel.findByIdAndUpdate(
+                updated_button.style_id,
+                {
+                    $set: style_update
+                },
+                {
+                    returnDocument: "after"
+                }
+            );
+
+            if (!updated_style) {
+                throw new NotFoundError("Style not found");
+            }
+        }
+
+        res.status(200).json({
+            updated_button,
+            updated_style
+        });
+
+    } catch (err) {
+        next(err);
+    }
+};
+
+// content of state numbers show update 
+
+export const content_statistic_update = async (req, res, next) => {
+    try {
+        const { section_id } = req.params;
+
+        const {
+            card_gap,
+            heading,
+            heading_color,
+            heading_alignment,
+            description,
+            description_alignment,
+            description_color,
+            top ,
+            left ,
+            bottom,
+            right
+        } = req.body;
+
+        const content_data = {};
+        const card_data = {};
+        const style_data = {};
+
+
+
+        if (card_gap !== undefined) {
+            content_data.card_gap = card_gap;
+        }
+
+
+        if (heading !== undefined) {
+            card_data.heading = heading;
+        }
+
+        if (heading_color !== undefined) {
+            card_data.heading_color = heading_color;
+        }
+
+        if (heading_alignment !== undefined) {
+            card_data.heading_alignment = heading_alignment;
+        }
+
+        if (description !== undefined) {
+            card_data.description = description;
+        }
+
+        if (description_color !== undefined) {
+            card_data.description_color = description_color;
+        }
+
+        if (description_alignment !== undefined) {
+            card_data.description_alignment = description_alignment;
+        }
+
+
+if (top !== undefined) {
+    style_data["padding.top"] = top;
+}
+
+if (right !== undefined) {
+    style_data["padding.right"] = right;
+}
+
+if (bottom !== undefined) {
+    style_data["padding.bottom"] = bottom;
+}
+
+if (left !== undefined) {
+    style_data["padding.left"] = left;
+}
+
+        const existing_content = await contentModel.findById(section_id);
+
+        if (!existing_content) {
+            throw new NotFoundError("Content not found");
+        }
+        
+
+        const updated_style = await styleModel.findByIdAndUpdate(
+            existing_content.style_id ,
+            {
+                $set : style_data 
+            },
+            {
+                returnDocument : "after"
+            }
+        )
+
+
+
+        const updated_content = await contentModel.findByIdAndUpdate(
+            section_id,
+            {
+                $set: content_data
+            },
+            {
+                returnDocument: "after"
+            }
+        );
+
+        const updated_card_data = await card_dataModel.findByIdAndUpdate(
+            existing_content.card_data_id,
+            {
+                $set : card_data
+            },
+            {
+                returnDocument : "after"
+            }
+        )
+
+
+let updated_media = null;
+
+        if (req.file) {
+
+            if (!existing_content.media_id) {
+                throw new NotFoundError("Media not found for this content");
+            }
+
+        
+            const existing_media = await mediaModel
+                .findById(existing_content.media_id)
+                .lean();
+
+            if (!existing_media) {
+                throw new NotFoundError("Media not found");
+            }
+
+
+            
+            const old_public_id = existing_media.public_id?.[0];
+
+            
+            const media_data = await upload_file(
+                req.file.buffer,
+                "media"
+            );
+            
+            const is_logo = req.file.fieldname==="logo";
+            const mediaType = is_logo ? "logo" : get_media_type(media_data.format);
+            updated_media = await mediaModel.findByIdAndUpdate(
+                existing_content.media_id,
+                {
+                    $set: {
+                        media_url: [media_data.url],
+                        public_id: [media_data.public_id],
+                        media_type: [mediaType],
+                        media_name: [req.file.originalname]
+                    }
+                },
+                {
+                    returnDocument: "after"
+                }
+            );
+
+            if (!updated_media) {
+                throw new NotFoundError("Media update failed");
+            }
+            if (
+                old_public_id &&
+                old_public_id !== media_data.public_id
+            ) {
+                await delete_file(old_public_id);
+            }
+        }
+
+        res.status(200).json({
+            message: "Content updated successfully",
+            updated_content,
+            updated_card_data,
+            updated_style,
+            updated_media
+        });
+
+    } catch (err) {
+        next(err);
+    }
+};

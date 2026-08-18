@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authorize, verify_token } from "../middleware/jwt.middleware.js";
-import { content_statistic_update, create_browse_map_content, create_button, create_category, create_container, create_footer_content, create_menu_card, create_news, create_section, create_statistic_card, create_statistic_content, create_testimonial_card, get_all_section, get_browse_content, get_button, get_container, get_footer_content, get_news_content , get_news_section_user, get_reviews_content, get_single_cards, get_single_news_detail, get_single_testimonial_card, get_statistic_content, get_testimonial_content, section_active_inactive, single_menu_card, single_news_category_all_cards, state_container_data_updated, update_button } from "../controller/section.controller.js";
+import { content_statistic_update, create_browse_map_content, create_button, create_category, create_container, create_footer_content, create_header_section, create_menu_card, create_news, create_section, create_statistic_card, create_statistic_content, create_testimonial_card, delete_cards, get_all_section, get_browse_content, get_button, get_container, get_footer_content, get_hero_section, get_news_content , get_news_section_user, get_reviews_content, get_single_cards, get_single_news_detail, get_single_testimonial_card, get_statistic_content, get_testimonial_content, section_active_inactive, single_menu_card, single_news_category_all_cards, state_container_data_updated, statistic_card_update, update_button, update_card_category_name, update_menu_card, update_testimonial_card } from "../controller/section.controller.js";
 import {  card_data_validator, card_style_validator, create_button_validator, create_container_validator, create_menu_card_validator, create_news_category_validator, create_section_validator, create_statistic_card_validator, create_statistic_content_validator, create_testimonial_card_validator, news_card_validator, section_id_validator, section_padding_validator, section_query_id_validator } from "../middleware/validators/section.validator.js";
 import { HandleValidationError } from "../middleware/validators/handleValidationError.js";
 import { upload_footer_logo_to_multer, upload_image_video, upload_img_to_multer } from "../middleware/multer.middleware.js";
@@ -91,6 +91,9 @@ section_router.post("/news_category/:section_id" , verify_token, authorize("supe
 // create news card 
 section_router.post("/news/:section_id" , verify_token, authorize("super_admin" , "section_admin") ,  upload_img_to_multer ,  section_id_validator  , card_data_validator , section_padding_validator , card_style_validator , news_card_validator , HandleValidationError ,create_news  )
 
+// create hero section state header section 
+section_router.post("/hero_section/:section_id" , verify_token, authorize("super_admin" , "section_admin") ,  upload_img_to_multer ,  section_id_validator  , card_data_validator    , HandleValidationError , create_header_section  )
+
 // get all cards of specific category 
 section_router.get("/category_cards" , verify_token, authorize("super_admin" , "section_admin") , section_query_id_validator , HandleValidationError ,single_news_category_all_cards  )
 
@@ -100,6 +103,9 @@ section_router.get("/news_card" , verify_token, authorize("super_admin" , "secti
 // get all news section cards 
 section_router.get("/news_section/:section_id" , verify_token, authorize("super_admin" , "section_admin") , section_id_validator , HandleValidationError , get_news_section_user  )
 
+// get hero section data
+section_router.get("/hero_section/:section_id" , verify_token, authorize("super_admin" , "section_admin")  ,  section_id_validator   , HandleValidationError , get_hero_section  )
+ 
 
 
 // update section status toggle 
@@ -117,10 +123,21 @@ section_router.patch("/content/:section_id" , verify_token , authorize("super_ad
 // update content for just footer sections
 section_router.patch("/footer/:section_id" , verify_token , authorize("super_admin" , "section_admin") ,upload_footer_logo_to_multer , section_id_validator ,  content_statistic_update)
 
+// update the statistic card update 
+section_router.patch("/card_update/:section_id" , verify_token , authorize("super_admin" , "section_admin") ,  upload_img_to_multer, section_id_validator ,  statistic_card_update)
+
+// update menu card 
+section_router.patch("/menu_card_update/:section_id" , verify_token , authorize("super_admin" , "section_admin") , section_id_validator ,  update_menu_card)
+
+// update testimonial cards data 
+section_router.patch("/testimonial_card_update/:section_id" , verify_token , authorize("super_admin" , "section_admin") , section_id_validator ,  update_testimonial_card)
+
+// update category name 
+section_router.patch("/category_name_update/:section_id" , verify_token , authorize("super_admin" , "section_admin") , section_id_validator ,  update_card_category_name)
 
 
 
 
 
-
+section_router.delete("/delete_card/:section_id" , verify_token , authorize("super_admin" , "section_admin") , section_id_validator , delete_cards)
 

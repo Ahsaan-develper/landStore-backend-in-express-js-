@@ -18,6 +18,7 @@ import cardMetaDataModel from "../models/cardMetaData.model.js";
 import { ReturnDocument } from "mongodb";
 
 
+
 // create section 
 export const create_section = async ( req  , res , next )=>{
     try {
@@ -457,7 +458,7 @@ res.status(200).json({
 
 export const create_statistic_card = async ( req , res , next )=>{
     try {
-        const { card_name , heading , heading_color , heading_alignment, sub_heading , sub_heading_color , sub_heading_alignment , description , description_color , description_alignment , top , left , bottom , right , background_color , border_color , icon_color , card_icon } = req.body ;
+        const { card_name , heading , heading_color , heading_alignment, sub_heading , sub_heading_color , sub_heading_alignment , description , description_color , description_alignment , top , left , bottom , right , background_color , border_color , icon_color , card_icon , icon_alignment} = req.body ;
         const { section_id } = req.params;
         
         const is_card_exist = await cardModel.findOne({ card_name  , content_id  : section_id}).select("card_name content_id").lean();
@@ -504,6 +505,7 @@ export const create_statistic_card = async ( req , res , next )=>{
             icon = await card_iconModel.create({
                 card_icon ,
                 icon_color,
+                icon_alignment,
                 card_id : card._id
             });
         }
@@ -1641,6 +1643,121 @@ const paged_cards = all_cards.slice(skip, skip + limit);
         next(err);
     }
 };
+
+// main state section first 
+
+export const create_header_section = async ( req , res , next )=>{
+    try {
+        const { section_id } = req.params ;
+        const {heading , heading_color , heading_alignment , sub_heading , sub_heading_alignment , sub_heading_color , description , description_alignment , description_color   } = req.body ;
+
+
+        const header_data  = await card_dataModel.create({
+            heading ,
+            heading_color ,
+            heading_alignment ,
+            sub_heading , 
+            sub_heading_alignment ,
+            sub_heading_color ,
+            description ,
+            description_alignment ,
+            description_color
+        });
+
+       
+        let media;
+        if ( !req.file ) throw new BadRequestError (" Image is need for background")
+            const media_data = await upload_file(req.file.buffer , "media");
+
+            media = await mediaModel.create({
+                media_url : media_data.url,
+                public_id : media_data.public_id,
+                media_name : "background_image",
+                media_type : get_media_type(media_data.format)
+            });
+
+            
+
+            const content_data  = await contentModel.create({
+            state_section_id : section_id,
+            media_id : media._id,
+            card_data_id : header_data
+        });
+
+        res.status(201).json({
+                header_data,
+                media ,
+                content_data
+            })
+    }catch ( err ){
+        next ( err );
+    }
+}
+
+
+// get hero or header section data 
+export const get_hero_section = async ( req , res , next )=>{
+    try {
+        const { section_id } = req.params;
+
+        const hero_section_data = await contentModel.aggregate([
+            {
+                $match : {
+                    state_section_id : new mongoose.Types.ObjectId(section_id)
+                }
+            },
+            {
+                $lookup : {
+                    from : "carddatas" ,
+                    localField : "card_data_id",
+                    foreignField : "_id",
+                    as : "card_data"
+                }
+            },
+            {
+                $unwind : { path : "$card_data" , preserveNullAndEmptyArrays : true }
+            },
+            {
+                $lookup : {
+                    from : "media" ,
+                    localField : "media_id",
+                    foreignField : "_id",
+                    as : "media"
+                }
+            },
+            {
+                $unwind : { path : "$media" , preserveNullAndEmptyArrays : true }
+            },
+            {
+                $project : {
+                    card_data : {
+                        heading : 1 ,
+                        heading_alignment : 1 ,
+                        heading_color : 1 ,
+                        sub_heading_alignment : 1 ,
+                        sub_heading : 1 ,
+                        sub_heading_color: 1 ,
+                        description : 1 ,
+                        description_color : 1 ,
+                        description_alignment : 1 ,
+                    },
+                    media : {
+                        media_url : 1 ,
+                        public_id : 1 
+                    }
+                }
+            }
+        ]);
+
+        if ( !hero_section_data ) throw new NotFoundError(" Hero section not found ");
+
+        res.status(200).json({
+            hero_section_data
+        })
+    }catch ( err ){
+        next ( err );
+    }
+}
 /////////////////////////////// editing part start here /////////////////////////////////
 
 export const section_active_inactive = async ( req , res , next )=>{
@@ -1861,6 +1978,9 @@ export const content_statistic_update = async (req, res, next) => {
             heading_color,
             heading_alignment,
             description,
+            sub_heading ,
+            sub_heading_alignment ,
+            sub_heading_color,
             description_alignment,
             description_color,
             top ,
@@ -1873,7 +1993,7 @@ export const content_statistic_update = async (req, res, next) => {
         const card_data = {};
         const style_data = {};
 
-
+        
 
         if (card_gap !== undefined) {
             content_data.card_gap = card_gap;
@@ -1890,6 +2010,18 @@ export const content_statistic_update = async (req, res, next) => {
 
         if (heading_alignment !== undefined) {
             card_data.heading_alignment = heading_alignment;
+        }
+
+        if (sub_heading !== undefined) {
+            card_data.sub_heading = sub_heading;
+        }
+
+        if (sub_heading_color !== undefined) {
+            card_data.sub_heading_color = sub_heading_color;
+        }
+
+        if (sub_heading_alignment !== undefined) {
+            card_data.sub_heading_alignment = sub_heading_alignment;
         }
 
         if (description !== undefined) {
@@ -2028,3 +2160,498 @@ let updated_media = null;
         next(err);
     }
 };
+
+
+// statistic cards update 
+
+export const statistic_card_update = async (req , res , next )=>{
+    try {
+        const { section_id } = req.params;
+        const { card_icon , icon_color , icon_alignment , heading , heading_alignment , heading_color , sub_heading , sub_heading_alignment , sub_heading_color , description , description_alignment , description_color , top , left , bottom , right , border_color , background_color  , link , link_color , link_alignment , date , date_color , date_alignment , tag} = req.body;
+        
+        let card_icon_data = {};
+        let style = { };
+        let card_data = { };
+        let card_meta_data = { };
+
+
+        if ( card_icon ){
+            card_icon_data.card_icon = card_icon;
+        }
+
+        if ( icon_color ){
+            card_icon_data.icon_color = icon_color;
+        }
+
+        if ( icon_alignment ){
+            card_icon_data.icon_alignment = icon_alignment;
+        }
+
+        
+        if ( heading ){
+            card_data.heading = heading;
+        }
+
+        if ( heading_color ){
+            card_data.heading_color = heading_color;
+        }
+
+        if ( heading_alignment ){
+            card_data.heading_alignment = heading_alignment;
+        }
+
+        if ( sub_heading ){
+            card_data.sub_heading = sub_heading;
+        }
+
+        if ( sub_heading_color ){
+            card_data.sub_heading_color = sub_heading_color;
+        }
+
+        if ( sub_heading_alignment ){
+            card_data.sub_heading_alignment = sub_heading_alignment;
+        }
+
+        if ( description ){
+            card_data.description = description;
+        }
+
+        if ( description_color ){
+            card_data.description_color = description_color;
+        }
+
+        if ( description_alignment ){
+            card_data.description_alignment = description_alignment;
+        }
+
+        if ( link ){
+            card_meta_data.link = link;
+        }
+
+        if ( link_color ){
+            card_meta_data.link_color = link_color;
+        }
+
+        if ( link_alignment ){
+            card_meta_data.link_alignment = link_alignment;
+        }
+
+        if ( date ){
+            card_meta_data.date = date;
+        }
+
+        if ( date_color ){
+            card_meta_data.date_color = date_color;
+        }
+
+        if ( date_alignment ){
+            card_meta_data.date_alignment = date_alignment;
+        }
+
+        if ( tag ){
+            card_meta_data.tag = tag;
+        }
+
+        
+        if ( top ){
+            style["padding.top"]=top;
+        }
+        if ( bottom ){
+            style["padding.bottom"]=bottom;
+        }
+
+        if ( left ){
+            style["padding.left"]=left;
+        }
+
+        if ( right ){
+            style["padding.right"]=right;
+        }
+
+        if ( background_color ){
+            style.background_color = background_color;
+        }
+
+        if ( border_color ){
+            style.border_color = border_color;
+        }
+        const is_exist_card  = await cardModel.findById( section_id ).select("_id style_id card_data_id media_id").lean();
+        if ( !is_exist_card ) throw new NotFoundError (" Card  not found ");
+
+        let style_data ;
+
+        if ( Object.keys(style).length > 0){
+            style_data = await styleModel.findByIdAndUpdate(
+                is_exist_card.style_id ,
+                {       
+                    $set : style
+                },
+                {
+                    returnDocument : "after"
+                }
+            )
+        }
+
+        let meta_updated_data ;
+
+        if ( Object.keys(card_meta_data).length > 0){
+            style_data = await cardMetaDataModel.findOneAndUpdate(
+                {
+                    card_id : section_id
+                },
+                {       
+                    $set : card_meta_data
+                },
+                {
+                    returnDocument : "after"
+                }
+            )
+        }
+        
+
+
+        let card_updated_data ;
+
+        if ( Object.keys(card_data).length > 0){
+            card_updated_data = await card_dataModel.findByIdAndUpdate(
+                is_exist_card.card_data_id ,
+                {
+                    $set : card_data
+                },
+                {
+                    returnDocument : "after"
+                }
+            )
+        }
+
+        let card_updated_icon ;
+
+        if ( Object.keys(card_icon_data).length > 0){
+            card_updated_icon = await card_iconModel.findOneAndUpdate(
+                {card_id : section_id},
+                {
+                    $set : card_icon_data
+                },
+                {
+                    returnDocument : "after"
+                }
+            )
+        }
+
+        
+let updated_media = null;
+
+        if (req.file) {
+
+            if (!is_exist_card.media_id) {
+                throw new NotFoundError("Media not found for this card");
+            }
+
+        
+            const existing_media = await mediaModel
+                .findById(is_exist_card.media_id)
+                .lean();
+
+            if (!existing_media) {
+                throw new NotFoundError("Media not found");
+            }
+            
+            const old_public_id = existing_media.public_id?.[0];
+            
+            const media_data = await upload_file(
+                req.file.buffer,
+                "news"
+            );
+            
+            updated_media = await mediaModel.findByIdAndUpdate(
+                is_exist_card.media_id,
+                {
+                    $set: {
+                        media_url: [media_data.url],
+                        public_id: [media_data.public_id],
+                        media_type: get_media_type(media_data.format),
+                        media_name: [req.file.originalname]
+                    }
+                },
+                {
+                    returnDocument: "after"
+                }
+            );
+
+            if (!updated_media) {
+                throw new NotFoundError("Media update failed");
+            }
+            if (
+                old_public_id &&
+                old_public_id !== media_data.public_id
+            ) {
+                await delete_file(old_public_id);
+            }
+        }
+
+        res.status(200).json({
+            style_data ,
+            card_updated_icon ,
+            card_updated_data,
+            meta_updated_data,
+            updated_media
+        })
+    }catch( err ){
+        next ( err );
+    }
+}
+
+// menu card data update 
+export const update_menu_card = async ( req , res , next )=>{
+    try {
+        const { section_id } = req.params;
+        const { menu , menu_alignment , menu_color , link , top , left , bottom , right , border_color , background_color } = req.body;
+        let style_data = {};
+        let menu_card_data = {};
+
+        if ( top ){
+            style_data["padding.top"]=top;
+        }
+        if ( bottom ){
+            style_data["padding.bottom"]=bottom;
+        }
+
+        if ( left ){
+            style_data["padding.left"]=left;
+        }
+
+        if ( right ){
+            style_data["padding.right"]=right;
+        }
+
+        if ( background_color ){
+            style_data.background_color = background_color;
+        }
+
+        if ( border_color ){
+            style_data.border_color = border_color;
+        }
+
+        if ( link ){
+            menu_card_data.link = link;
+        }
+
+        
+
+        if ( menu ){
+            menu_card_data.menu = menu;
+        }
+
+        if ( menu_color ){
+            menu_card_data.menu_color = menu_color;
+        }
+
+        if ( menu_alignment ){
+            menu_card_data.menu_alignment = menu_alignment;
+        }
+
+
+
+        const is_exist_card  = await menuModel.findById( section_id ).select("_id style_id").lean();
+        if ( !is_exist_card ) throw new NotFoundError (" Card  not found ");
+
+        let updated_style_data;
+        if ( Object.keys(style_data).length > 0){
+            updated_style_data = await styleModel.findByIdAndUpdate(
+                is_exist_card.style_id ,
+                {       
+                    $set : style_data
+                },
+                {
+                    returnDocument : "after"
+                }
+            )
+        }
+        
+        let updated_menu_data;
+        if ( Object.keys(menu_card_data).length > 0){
+            updated_menu_data = await menuModel.findByIdAndUpdate(
+                is_exist_card._id,
+                {       
+                    $set : menu_card_data
+                },
+                {
+                    returnDocument : "after"
+                }
+            )
+        }
+
+        res.status(200).json({
+            updated_menu_data ,
+            updated_style_data
+        })
+
+    }catch ( err ){
+        next ( err );
+    }
+}
+
+
+
+// update the reviews testimonial 
+export const update_testimonial_card = async ( req , res , next )=>{
+    try {
+        const { section_id } = req.params;
+        const { testimonial , testimonial_alignment , testimonial_color , customer , customer_alignment , customer_color , username , username_color , username_alignment , top , left , bottom , right , border_color , background_color } = req.body;
+        let style_data = {};
+        let testimonial_card_data = {};
+
+        if ( top ){
+            style_data["padding.top"]=top;
+        }
+        if ( bottom ){
+            style_data["padding.bottom"]=bottom;
+        }
+
+        if ( left ){
+            style_data["padding.left"]=left;
+        }
+
+        if ( right ){
+            style_data["padding.right"]=right;
+        }
+
+        if ( background_color ){
+            style_data.background_color = background_color;
+        }
+
+        if ( border_color ){
+            style_data.border_color = border_color;
+        }
+
+        if ( testimonial ){
+            testimonial_card_data.testimonial = testimonial;
+        }
+
+        
+
+        if ( testimonial_color ){
+            testimonial_card_data.testimonial_color = testimonial_color;
+        }
+
+        if ( testimonial_alignment ){
+            testimonial_card_data.testimonial_alignment = testimonial_alignment;
+        }
+
+        if ( customer ){
+            testimonial_card_data.customer = customer;
+        }
+
+        if ( customer_color ){
+            testimonial_card_data.customer_color = customer_color;
+        }
+
+        if ( customer_alignment ){
+            testimonial_card_data.customer_alignment = customer_alignment;
+        }
+
+        if ( username ){
+            testimonial_card_data.username = username;
+        }
+
+        if ( username_color ){
+            testimonial_card_data.username_color = username_color;
+        }
+
+        if ( username_alignment ){
+            testimonial_card_data.username_alignment = username_alignment;
+        }
+
+
+        const is_exist_card  = await testimonialModel.findById( section_id ).select("_id style_id").lean();
+        if ( !is_exist_card ) throw new NotFoundError (" Card  not found ");
+
+        let updated_style_data;
+        if ( Object.keys(style_data).length > 0){
+            updated_style_data = await styleModel.findByIdAndUpdate(
+                is_exist_card.style_id ,
+                {           
+                    $set : style_data
+                },
+                {
+                    returnDocument : "after"
+                }
+            )
+        }
+        
+        let updated_testimonial_data;
+        if ( Object.keys(testimonial_card_data).length > 0){
+            updated_testimonial_data = await testimonialModel.findByIdAndUpdate(
+                is_exist_card._id,
+                {       
+                    $set : testimonial_card_data
+                },
+                {
+                    returnDocument : "after"
+                }
+            )
+        }
+
+        res.status(200).json({
+            updated_testimonial_data ,
+            updated_style_data
+        })
+
+    }catch ( err ){
+        next ( err );
+    }
+}
+
+
+// update news categories 
+export const update_card_category_name = async ( req , res , next )=>{
+    try {
+        const { section_id } = req.params;
+        const { category_name } = req.body;
+
+        const updated_category = await cardCategoryModel.findByIdAndUpdate(
+                section_id,
+            {
+                $set : { category_name : category_name}
+            },
+            {
+                returnDocument : "after"
+            }
+        )
+
+        if ( !updated_category) throw new NotFoundError(" Category not found ")
+
+        res.status(200).json({
+            updated_category
+        })
+
+    }catch ( err ){
+        next ( err );
+    }
+}
+
+
+
+// delete the landstore landing page content and cards data 
+
+export const delete_cards = async ( req , res , next )=>{
+    try {
+        const { section_id } = req.params;
+        const delete_card = await cardModel.findByIdAndUpdate(
+            section_id ,
+            { $set : { is_deleted  : true } },
+            {
+                returnDocument : "after"
+            }
+        )
+
+        if ( !delete_card ) throw new NotFoundError(" Card not found ");
+
+        res.status(200).json({
+            message : "card is deleted",
+            delete_card
+        })
+    }catch ( err ){
+        next ( err );
+    }
+}

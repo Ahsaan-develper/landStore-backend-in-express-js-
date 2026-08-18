@@ -9,5 +9,6 @@ const menu_schema = new mongoose.Schema({
     style_id : { type : mongoose.Schema.Types.ObjectId , required : true , ref : "Style" },
     content_id : { type : mongoose.Schema.Types.ObjectId , required : true , ref : "ContentStyle" },
 } , { timestamps : true })
-
+menu_schema.index({ style_id: 1 });
+menu_schema.index({ content_id: 1 });
 export default mongoose.model("Menu" , menu_schema)

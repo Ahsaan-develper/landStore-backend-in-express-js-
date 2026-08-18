@@ -14,5 +14,6 @@ const testimonial_schema = new mongoose.Schema({
     style_id : { type : mongoose.Schema.Types.ObjectId , required : true , ref : "Style"},
     content_id : { type : mongoose.Schema.Types.ObjectId , required : true , ref : "ContentStyle"},
 } , { timestamps : true })
-
+testimonial_schema.index({ style_id : 1})
+testimonial_schema.index({ content_id : 1})
 export default mongoose.model("testimonial" , testimonial_schema)

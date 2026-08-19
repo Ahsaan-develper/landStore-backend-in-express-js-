@@ -1,7 +1,6 @@
 import mongoose from "mongoose";
 
 const styleSchema = new mongoose.Schema({
-    // alignment : { type : String , default : null},
     background_color : { type : String },
     border_color: { type : String},
     padding : {

@@ -19,10 +19,10 @@ import { ReturnDocument } from "mongodb";
 
 
 
-// create section 
+// create section
 export const create_section = async ( req  , res , next )=>{
     try {
-        const { route , title , status , description }= req.body;
+        const { route , title , status , description , order }= req.body;
         const admin_id = req.user.sub;
         const is_existing_section = await state_sectionModel.findOne({ title }).select("_id").lean();
         if( is_existing_section ) throw new ConflictError("State section with this name already create")
@@ -31,6 +31,7 @@ export const create_section = async ( req  , res , next )=>{
             title ,
             description,
             status : "active",
+            order ,
             admin_id
         });
         res.status(201).json({
@@ -82,6 +83,7 @@ export const get_all_section = async (req, res, next) => {
 };
 
 
+
 // state section area 
 
 export const create_container = async ( req , res , next )=>{
@@ -119,6 +121,20 @@ export const create_container = async ( req , res , next )=>{
 export const get_container = async ( req , res , next )=>{
     try {
         const { id }= req.query;
+
+        const state_section = await state_sectionModel
+            .findOne({
+                _id: id,
+                status: "active"
+            })
+            .select("_id")
+            .lean();
+
+        if (!state_section) {
+            return res.status(200).json({
+                container: []
+            });
+        }
 
 const container = await containerModel.aggregate([
     {
@@ -204,6 +220,20 @@ export const create_button = async ( req , res , next )=>{
 export const get_button = async ( req , res , next )=>{
     try {
         const { id }= req.query;
+
+        const state_section = await state_sectionModel
+            .findOne({
+                _id: id,
+                status: "active"
+            })
+            .select("_id")
+            .lean();
+
+        if (!state_section) {
+            return res.status(200).json({
+                button: []
+            });
+        }
 
 const button = await buttonModel.aggregate([
     {
@@ -299,7 +329,19 @@ export const create_statistic_content = async ( req , res , next )=>{
 export const get_statistic_content = async ( req , res , next )=>{
     try {
         const { id }= req.query;
+        const state_section = await state_sectionModel
+            .findOne({
+                _id: id,
+                status: "active"
+            })
+            .select("_id")
+            .lean();
 
+        if (!state_section) {
+            return res.status(200).json({
+                content: []
+            });
+        }
         const page = Math.max(Number(req.query.page) || 1, 1);
         const limit = Math.max(Number(req.query.limit) || 10, 1);
         const skip = (Number(page - 1 ))* limit;
@@ -369,7 +411,19 @@ res.status(200).json({
 export const get_reviews_content = async ( req , res , next )=>{
     try {
         const { id }= req.query;
-        
+        const state_section = await state_sectionModel
+            .findOne({
+                _id: id,
+                status: "active"
+            })
+            .select("_id")
+            .lean();
+
+        if (!state_section) {
+            return res.status(200).json({
+                content: []
+            });
+        }
         const page = Math.max(Number(req.query.page) || 1, 1);
         const limit = Math.max(Number(req.query.limit) || 10, 1);
         const skip = (Number(page - 1 ))* limit;
@@ -460,12 +514,12 @@ export const create_statistic_card = async ( req , res , next )=>{
     try {
         const { card_name , heading , heading_color , heading_alignment, sub_heading , sub_heading_color , sub_heading_alignment , description , description_color , description_alignment , top , left , bottom , right , background_color , border_color , icon_color , card_icon , icon_alignment} = req.body ;
         const { section_id } = req.params;
+        const ObjectId = new mongoose.Types.ObjectId(section_id);
         
         const is_card_exist = await cardModel.findOne({ card_name  , content_id  : section_id}).select("card_name content_id").lean();
         
-        if ( is_card_exist?.card_name === card_name && section_id === is_card_exist?.content_id ) throw new ConflictError("Card with this name already exist , enter different name ");
+        if ( is_card_exist?.card_name === card_name &&    ObjectId.equals(is_card_exist.content_id)) throw new ConflictError("Card with this name already exist , enter different name ");
 
-                if ( card_icon  && !icon_color || !card_icon && icon_color  ) throw new BadRequestError(" Please provide both card_icon and icon_color ");
 
         const style = await styleModel.create({
             border_color ,
@@ -527,7 +581,9 @@ export const create_statistic_card = async ( req , res , next )=>{
 //  get single card data cards of statistic content 
 export const get_single_cards = async (req, res, next) => {
     try {
+
         const { id } = req.query;
+
 
         const [card] = await cardModel.aggregate([
 
@@ -537,6 +593,39 @@ export const get_single_cards = async (req, res, next) => {
                 }
             },
 
+            {
+                $lookup : {
+                    from  : "contentstyles",
+                    localField : "content_id" ,
+                    foreignField : "_id",
+                    as : "content"
+                }
+            },
+            {
+                $unwind: {
+                    path: "$content",
+                    preserveNullAndEmptyArrays: false
+                }
+            },
+            {
+                $lookup : {
+                    from  : "statesections",
+                    localField : "state_section_id" ,
+                    foreignField : "_id",
+                    as : "state_section"
+                }
+            },
+            {
+                $unwind: {
+                    path: "$state_section",
+                    preserveNullAndEmptyArrays: false
+                }
+            },
+            {
+                $match: {
+                    "state_section.status": "active"
+                }
+            },
             {
                 $lookup: {
                     from: "styles",
@@ -1645,13 +1734,10 @@ const paged_cards = all_cards.slice(skip, skip + limit);
 };
 
 // main state section first 
-
 export const create_header_section = async ( req , res , next )=>{
     try {
         const { section_id } = req.params ;
         const {heading , heading_color , heading_alignment , sub_heading , sub_heading_alignment , sub_heading_color , description , description_alignment , description_color   } = req.body ;
-
-
         const header_data  = await card_dataModel.create({
             heading ,
             heading_color ,
@@ -1663,27 +1749,20 @@ export const create_header_section = async ( req , res , next )=>{
             description_alignment ,
             description_color
         });
-
-       
         let media;
         if ( !req.file ) throw new BadRequestError (" Image is need for background")
             const media_data = await upload_file(req.file.buffer , "media");
-
             media = await mediaModel.create({
                 media_url : media_data.url,
                 public_id : media_data.public_id,
                 media_name : "background_image",
                 media_type : get_media_type(media_data.format)
             });
-
-            
-
             const content_data  = await contentModel.create({
             state_section_id : section_id,
             media_id : media._id,
             card_data_id : header_data
         });
-
         res.status(201).json({
                 header_data,
                 media ,
@@ -1693,7 +1772,6 @@ export const create_header_section = async ( req , res , next )=>{
         next ( err );
     }
 }
-
 
 // get hero or header section data 
 export const get_hero_section = async ( req , res , next )=>{
@@ -1763,24 +1841,14 @@ export const get_hero_section = async ( req , res , next )=>{
 export const section_active_inactive = async ( req , res , next )=>{
     try {
         const { section_id } = req.params ;
-
+        const { status } = req.body ;
         const toggle_status = await state_sectionModel.findByIdAndUpdate(
             section_id ,
-            [
-                {
-                    $set : {
-                        status : {
-                            $cond : [
-                                {
-                                    $eq : ["$status" , "active"]
-                                },
-                                "inactive",
-                                "active"
-                            ]
-                        }
-                    }
-                },
-            ],
+            {
+                $set : { 
+                    status : status
+                }
+            },
             {
                 returnDocument : "after",
                 updatePipeline: true
@@ -2637,6 +2705,7 @@ export const update_card_category_name = async ( req , res , next )=>{
 export const delete_cards = async ( req , res , next )=>{
     try {
         const { section_id } = req.params;
+        
         const delete_card = await cardModel.findByIdAndUpdate(
             section_id ,
             { $set : { is_deleted  : true } },
@@ -2644,9 +2713,7 @@ export const delete_cards = async ( req , res , next )=>{
                 returnDocument : "after"
             }
         )
-
         if ( !delete_card ) throw new NotFoundError(" Card not found ");
-
         res.status(200).json({
             message : "card is deleted",
             delete_card
@@ -2655,3 +2722,1411 @@ export const delete_cards = async ( req , res , next )=>{
         next ( err );
     }
 }
+
+// delete the footer and browse section content 
+export const delete_content = async ( req , res , next )=>{
+    try {
+        const { section_id } = req.params;
+        
+        const delete_content = await contentModel.findByIdAndUpdate(
+            section_id ,
+            { $set : { is_deleted  : true } },
+            {
+                returnDocument : "after"
+            }
+        )
+        if ( !delete_content ) throw new NotFoundError(" content not found ");
+        res.status(200).json({
+            message : "content is deleted",
+            delete_content
+        })
+    }catch ( err ){
+        next ( err );
+    }
+}
+// get just statistic section for admin preview
+export const get_statistics_section = async (req, res, next) => {
+    try {
+        const page = Math.max(Number(req.query.page) || 1 ,1 );
+        const limit = Math.max(Number(req.query.limit) || 10 ,1 );
+        const skip = (page - 1) * limit ;
+        const { section_id } = req.params;
+        const [statistics] = await state_sectionModel.aggregate([
+
+            {
+                $match: {
+                    _id: new mongoose.Types.ObjectId(section_id),
+                    status: "active"
+                }
+            },
+
+
+            {
+                $lookup: {
+                    from: "containerstyles",
+                    let: {
+                        sectionId: "$_id"
+                    },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $eq: [
+                                        "$state_section_id",
+                                        "$$sectionId"
+                                    ]
+                                }
+                            }
+                        },
+                        {
+                            $lookup: {
+                                from: "styles",
+                                localField: "style_id",
+                                foreignField: "_id",
+                                as: "style"
+                            }
+                        },
+
+                        {
+                            $unwind: {
+                                path: "$style",
+                                preserveNullAndEmptyArrays: true
+                            }
+                        },
+
+                        {
+                            $project: {
+                                _id: 1,
+                                alignment: 1,
+                                style: {
+                                    _id: 1,
+                                    padding: 1,
+                                    background_color: 1,
+                                    border_color: 1
+                                }
+                            }
+                        }
+                    ],
+                    as: "container"
+                }
+            },
+
+            {
+                $lookup: {
+                    from: "contentstyles",
+                    let: {
+                        sectionId: "$_id"
+                    },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $eq: [
+                                        "$state_section_id",
+                                        "$$sectionId"
+                                    ]
+                                }
+                            }
+                        },
+
+                    
+                        {
+                            $lookup: {
+                                from: "cardstyles",
+                                let: {
+                                    contentId: "$_id"
+                                },
+                                pipeline: [
+
+                                    {
+                                        $match: {
+                                            $expr: {
+                                                $eq: [
+                                                    "$content_id",
+                                                    "$$contentId"
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    {
+                                        $sort : {
+                                            createdAt : -1
+                                        }
+                                    },
+                                    {
+                                        $skip : skip
+                                    },
+                                    {
+                                        $limit : limit
+                                    },
+                                
+                                    {
+                                        $lookup: {
+                                            from: "styles",
+                                            localField: "style_id",
+                                            foreignField: "_id",
+                                            as: "style"
+                                        }
+                                    },
+
+                                    
+                                    {
+                                        $lookup: {
+                                            from: "carddatas",
+                                            localField: "card_data_id",
+                                            foreignField: "_id",
+                                            as: "card_data"
+                                        }
+                                    },
+
+                                    
+                                    {
+                                        $lookup: {
+                                            from: "icons",
+                                            localField: "_id",
+                                            foreignField: "card_id",
+                                            as: "icon"
+                                        }
+                                    },
+
+                                    {
+                                        $unwind: {
+                                            path: "$style",
+                                            preserveNullAndEmptyArrays: true
+                                        }
+                                    },
+
+                                    {
+                                        $unwind: {
+                                            path: "$card_data",
+                                            preserveNullAndEmptyArrays: true
+                                        }
+                                    },
+
+                                    {
+                                        $project: {
+                                            _id: 1,
+                                            card_name: 1,
+
+                                            style: {
+                                                _id: 1,
+                                                background_color: 1,
+                                                border_color: 1,
+                                                padding: 1
+                                            },
+
+                                            card_data: {
+                                                _id: 1,
+                                                heading: 1,
+                                                heading_color: 1,
+                                                heading_alignment: 1,
+
+                                                sub_heading: 1,
+                                                sub_heading_color: 1,
+                                                sub_heading_alignment: 1,
+
+                                                description: 1,
+                                                description_color: 1,
+                                                description_alignment: 1
+                                            },
+
+                                            icon: 1
+                                        }
+                                    }
+                                ],
+                                as: "cards"
+                            }
+                        },
+                        {
+                            $project: {
+                                _id: 1,
+                                card_gap :1 ,
+                                heading: 1,
+                                heading_color: 1,
+                                heading_alignment: 1,
+                                description: 1,
+                                description_color: 1,
+                                description_alignment: 1,
+                                cards: 1
+                            }
+                        }
+                    ],
+                    as: "content"
+                }
+            },
+            
+            {
+                $project: {
+                    _id: 1,
+                    route: 1,
+                    title: 1,
+                    description: 1,
+                    container: 1,
+                    content: 1
+                }
+            }
+        ]);
+        if (!statistics) {
+            throw new NotFoundError(
+                "Statistics section not found or inactive"
+            );
+        }
+        
+        res.status(200).json({
+            statistics,
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+
+// get why land store 
+export const get_why_landstore = async (req, res, next) => {
+    try {
+        const page = Math.max(Number(req.query.page) ||  1, 1 );
+        const limit = Math.max(Number(req.query.page) ||  10, 1 );
+        const skip = ( page - 1 ) * limit;
+        const { section_id } = req.params;
+
+        const [section] = await state_sectionModel.aggregate([
+
+            
+            {
+                $match: {
+                    _id: new mongoose.Types.ObjectId(section_id),
+                    status: "active"
+                }
+            },
+
+            
+
+            {
+                $lookup: {
+                    from: "containerstyles",
+                    localField: "_id",
+                    foreignField: "state_section_id",
+                    as: "container"
+                }
+            },
+
+            // Container Style
+            {
+                $lookup: {
+                    from: "styles",
+                    localField: "container.style_id",
+                    foreignField: "_id",
+                    as: "container_style"
+                }
+            },
+
+            
+
+            {
+                $lookup: {
+                    from: "contentstyles",
+                    localField: "_id",
+                    foreignField: "state_section_id",
+                    as: "content"
+                }
+            },
+            {
+                $lookup: {
+                    from: "carddatas",
+                    localField: "content.card_data_id",
+                    foreignField: "_id",
+                    as: "content_data"
+                }
+            },
+
+            {
+                $lookup: {
+                    from: "buttonstyles",
+                    localField: "_id",
+                    foreignField: "state_section_id",
+                    as: "button"
+                }
+            },
+
+            {
+                $lookup : {
+                    from: "styles",
+                    localField: "button.style_id",
+                    foreignField: "_id",
+                    as: "button_styles"
+                }
+            },
+
+            {
+                $lookup: {
+                    from: "cardstyles",
+                    localField: "content._id",
+                    foreignField: "content_id",
+                    as: "cards"
+                }
+            },
+            {
+                $sort : {
+                    createdAt : -1
+                }
+            },
+            {
+                $skip  : skip
+            },
+            {
+                $limit : limit 
+            },
+
+            {
+                $lookup: {
+                    from: "styles",
+                    localField: "cards.style_id",
+                    foreignField: "_id",
+                    as: "card_styles"
+                }
+            },
+            
+            {
+                $lookup: {
+                    from: "carddatas",
+                    localField: "cards.card_data_id",
+                    foreignField: "_id",
+                    as: "card_data"
+                }
+            },
+
+
+            {
+                $lookup: {
+                    from: "icons",
+                    localField: "cards._id",
+                    foreignField: "card_id",
+                    as: "icons"
+                }
+            },
+            {
+                $project: {
+                    _id: 1,
+                    route: 1,
+                    title: 1,
+                    description: 1,
+
+                    container: {
+                        alignment : 1 ,
+                    },
+                    container_style: {
+                        background_color : 1 ,
+                        padding : 1 
+                    },
+
+                    content: {
+                        card_gap : 1 
+                    },
+                    content_data  : {
+                        heading : 1 ,
+                        heading_color : 1 ,
+                        heading_alignment : 1 ,
+                        description : 1 ,
+                        description_color : 1 ,
+                        description_alignment : 1 ,
+                    },
+
+                    button: {
+                        button_text : 1 ,
+                        button_link : 1 ,
+                        button_color : 1 ,
+                    },
+                    button_styles : {
+                        background_color : 1,
+                        border_color : 1 ,
+                        padding : 1 
+                    },
+
+                    cards: {
+                        card_name : 1 ,
+                        _id : 1 
+                    },
+                    card_styles: {
+                        background_color : 1 ,
+                        border_color : 1 ,
+                        padding :  1
+                    },
+                    
+                    card_data: {
+                        heading : 1 ,
+                        heading_color : 1 ,
+                        heading_alignment : 1 ,
+                        description : 1 ,
+                        description_color : 1 ,
+                        description_alignment : 1 ,
+                    },
+                    icons: {
+                        _id : 1,
+                        icon_color : 1 ,
+                        icon_alignment : 1 ,
+                        card_icon : 1 
+                    }
+                }
+            }
+
+        ]);
+
+        if (!section) {
+            throw new NotFoundError(
+                "Section not found or inactive"
+            );
+        }
+
+        res.status(200).json({
+            why_landstore: section
+        });
+
+    } catch (err) {
+        next(err);
+    }
+};
+
+
+export const get_testimonial_section = async (req, res, next) => {
+    try {
+        
+        const page = Math.max(Number(req.query.page) || 1 , 1 );
+        const limit = Math.max(Number(req.query.limit) || 10 , 1 );
+        const skip = ( page -1 ) * limit ;
+        const { section_id } = req.params;
+        const [section] = await state_sectionModel.aggregate([
+            {
+                $match: {
+                    _id: new mongoose.Types.ObjectId(section_id),
+                    status: "active"
+                }
+            },
+            {
+                $lookup: {
+                    from: "containerstyles",
+                    localField: "_id",
+                    foreignField: "state_section_id",
+                    as: "container"
+                }
+            },
+            // Container Style
+            {
+                $lookup: {
+                    from: "styles",
+                    localField: "container.style_id",
+                    foreignField: "_id",
+                    as: "container_style"
+                }
+            },
+            {
+                $lookup: {
+                    from: "contentstyles",
+                    localField: "_id",
+                    foreignField: "state_section_id",
+                    as: "content"
+                }
+            },
+            {
+                $lookup: {
+                    from: "carddatas",
+                    localField: "content.card_data_id",
+                    foreignField: "_id",
+                    as: "content_data"
+                }
+            },
+        
+            {
+                $lookup: {
+                    from: "testimonials",
+                    localField: "content._id",
+                    foreignField: "content_id",
+                    as: "testimonial_cards"
+                }
+            },
+            {
+                $sort : {
+                    createdAt :  -1 
+                }
+            },
+            {
+                $skip : skip
+            },
+            {
+                $limit : limit
+            },
+            {
+                $lookup: {
+                    from: "styles",
+                    localField: "testimonial_cards.style_id",
+                    foreignField: "_id",
+                    as: "testimonial_card_styles"
+                }
+            },
+            {
+                $project: {
+                    _id: 1,
+                    route: 1,
+                    title: 1,
+                    description: 1,
+                    container: {
+                        alignment : 1 
+                    },
+                    container_style: {
+                        background_color :1 ,
+                        border_color :1 ,
+                        padding : 1
+                    },
+                    content: {
+                        card_gap : 1 
+                    },
+                    content_data: {
+                        heading : 1 ,
+                        heading_color : 1 ,
+                        heading_alignment : 1 ,
+                        description : 1 ,
+                        description_color : 1 ,
+                        description_alignment : 1 ,
+                    },
+                    testimonial_cards : {
+                        testimonial_name : 1,
+                        testimonial : 1,
+                        testimonial_color : 1,
+                        testimonial_alignment : 1,
+                        customer :  1,
+                        customer_color :  1,
+                        customer_color :  1,
+                        username : 1 ,
+                        username_color : 1 ,
+                        username_alignment : 1 ,
+                    },
+                    testimonial_card_styles : {
+                        padding : 1 ,
+                        background_color : 1,
+                        border_color :  1
+                    }
+                    
+                }
+            }
+        ]);
+        if (!section) {
+            throw new NotFoundError(
+                "Testimonial section not found or inactive"
+            );
+        }
+        res.status(200).json({
+            testimonial: section
+        });
+
+    } catch (err) {
+        next(err);
+    }
+};
+
+export const get_browse_map_section = async (req, res, next) => {
+    try {
+        const { section_id } = req.params;
+
+        const [section] = await state_sectionModel.aggregate([
+
+            {
+                $match: {
+                    _id: new mongoose.Types.ObjectId(section_id),
+                    status: "active"
+                }
+            },
+
+            {
+                $lookup: {
+                    from: "containerstyles",
+                    localField: "_id",
+                    foreignField: "state_section_id",
+                    as: "container"
+                }
+            },
+
+            {
+                $lookup: {
+                    from: "styles",
+                    localField: "container.style_id",
+                    foreignField: "_id",
+                    as: "container_style"
+                }
+            },
+
+            {
+                $lookup: {
+                    from: "contentstyles",
+                    localField: "_id",
+                    foreignField: "state_section_id",
+                    as: "content"
+                }
+            },
+
+            // Content Style
+            {
+                $lookup: {
+                    from: "styles",
+                    localField: "content.style_id",
+                    foreignField: "_id",
+                    as: "content_style"
+                }
+            },
+
+            {
+                $lookup: {
+                    from: "carddatas",
+                    localField: "content.card_data_id",
+                    foreignField: "_id",
+                    as: "content_data"
+                }
+            },
+
+            {
+                $lookup: {
+                    from: "media",
+                    localField: "content.media_id",
+                    foreignField: "_id",
+                    as: "content_media"
+                }
+            },
+
+            {
+                $lookup: {
+                    from: "buttonstyles",
+                    localField: "_id",
+                    foreignField: "state_section_id",
+                    as: "button"
+                }
+            },
+
+            {
+                $lookup: {
+                    from: "styles",
+                    localField: "button.style_id",
+                    foreignField: "_id",
+                    as: "button_style"
+                }
+            },
+
+            {
+                $project: {
+                    _id: 1,
+                    route: 1,
+                    title: 1,
+                    description: 1,
+
+                    container: {
+                        alignment :  1
+                    },
+                    container_style: {
+                        padding : 1 ,
+                        background_color : 1 
+                    },
+
+                    content: {
+                        _id : 1 
+                    },
+                    content_style: {
+                        padding : 1 
+                    },
+                    content_data : {
+                        heading : 1 ,
+                        heading_color : 1 ,
+                        heading_alignment : 1 ,
+                        description : 1 ,
+                        description_color : 1 ,
+                        description_alignment : 1 ,
+                    },
+                    content_media : {
+                        _id : 1 ,
+                        media_url : 1 ,
+                        public_id : 1 
+                    },
+
+                    button: {
+                        button_link : 1 ,
+                        button_text :  1,
+                        button_color : 1 ,
+                    },
+
+                    button_style : {
+                        padding : 1 ,
+                        border_color : 1 ,
+                        background_color : 1 
+                    }
+                }
+            }
+        ]);
+
+        if (!section) {
+            throw new NotFoundError(
+                "Section not found or inactive"
+            );
+        }
+
+        res.status(200).json({
+            section
+        });
+
+    } catch (err) {
+        next(err);
+    }
+};
+
+// get footer section 
+export const get_footer_section = async (req, res, next) => {
+    try {
+        const page = Math.max(Number(req.query.page) || 1 , 1);
+        const limit = Math.max(Number(req.query.limit) || 10 , 1);
+        const skip = (page -1 ) * limit ;
+        const { section_id } = req.params;
+        const [section] = await state_sectionModel.aggregate([
+            {
+                $match: {
+                    _id: new mongoose.Types.ObjectId(section_id),
+                    status: "active"
+                }
+            },
+            {
+                $lookup: {
+                    from: "containerstyles",
+                    localField: "_id",
+                    foreignField: "state_section_id",
+                    as: "container"
+                }
+            },
+
+            // Container Style
+            {
+                $lookup: {
+                    from: "styles",
+                    localField: "container.style_id",
+                    foreignField: "_id",
+                    as: "container_style"
+                }
+            },
+            {
+                $lookup: {
+                    from: "contentstyles",
+                    localField: "_id",
+                    foreignField: "state_section_id",
+                    as: "content"
+                }
+            },
+
+            {
+                $lookup: {
+                    from: "media",
+                    localField: "content.media_id",
+                    foreignField: "_id",
+                    as: "media"
+                }
+            },
+
+            {
+                $lookup: {
+                    from: "menus",
+                    localField: "content._id",
+                    foreignField: "content_id",
+                    as: "menu_cards"
+                }
+            },
+            {
+                $sort : {
+                    createdAt :  -1 
+                }
+            },
+            {
+                $skip : skip
+            },
+            {
+                $limit : limit
+            },
+            {
+                $lookup: {
+                    from: "styles",
+                    localField: "menu_cards.style_id",
+                    foreignField: "_id",
+                    as: "menu_card_styles"
+                }
+            },
+            {
+                $project: {
+                    _id: 1,
+                    route: 1,
+                    title: 1,
+                    description: 1,
+                    container: {
+                        alignment : 1 
+                    },
+                    container_style: {
+                        background_color :1 ,
+                        border_color :1 ,
+                        padding : 1
+                    },
+
+                    content: {
+                        card_gap : 1 ,
+                        copy_right :  1
+                    },
+                    media : {
+                        public_id : 1,
+                        media_url : 1 
+                    },
+                    menu_cards : {
+                        menu_name :  1 ,
+                        menu : 1 ,
+                        menu_color : 1 ,
+                        menu_alignment : 1 ,
+                        link : 1 ,
+                        link_color :  1,
+                        link_alignment :  1, 
+                    },
+                    menu_card_styles : {
+                        padding : 1 ,
+                        border_color :  1,
+                        background_color :  1
+                    }
+                }
+            }
+        ]);
+        if (!section) {
+            throw new NotFoundError(
+                "Footer section not found or inactive"
+            );
+        }
+        res.status(200).json({
+            footer: section
+        });
+
+    } catch (err) {
+        next(err);
+    }
+};
+
+
+export const get_news_section = async (req, res, next) => {
+    try {
+        const { section_id } = req.query;
+        const page =Math.max(Number(req.query.page) || 1,1 );
+        const limit =Math.max(Number(req.query.limit) || 10,1 );
+        const skip = (page - 1) * limit;
+
+        const [section] = await state_sectionModel.aggregate([
+            {
+                $match: {
+                    _id: new mongoose.Types.ObjectId(section_id),
+                    status: "active"
+                }
+            },
+
+            {
+                $lookup: {
+                    from: "containerstyles",
+                    localField: "_id",
+                    foreignField: "state_section_id",
+                    as: "container"
+                }
+            },
+
+            {
+                $lookup: {
+                    from: "styles",
+                    localField: "container.style_id",
+                    foreignField: "_id",
+                    as: "container_style"
+                }
+            },
+
+            {
+                $lookup: {
+                    from: "contentstyles",
+                    localField: "_id",
+                    foreignField: "state_section_id",
+                    as: "content"
+                }
+            },
+
+            {
+                $lookup: {
+                    from: "styles",
+                    localField: "content.style_id",
+                    foreignField: "_id",
+                    as: "content_style"
+                }
+            },
+            {
+    $lookup: {
+        from: "cardstyles",
+        let: {
+            contentIds: "$content._id"
+        },
+        pipeline: [
+            {
+                $match: {
+                    $expr: {
+                        $and: [
+                            {
+                                $in: ["$content_id", "$$contentIds"]
+                            },
+                            {
+                                $eq: ["$is_delete", false]
+                            }
+                        ]
+                    }
+                }
+            }
+        ],
+        as: "news_cards"
+    }
+},
+            {
+                $set: {
+                    news_cards: {
+                        $sortArray: {
+                            input: "$news_cards",
+                            sortBy: {
+                                createdAt: -1
+                            }
+                        }
+                    }
+                }
+            },
+
+            {
+                $set: {
+                    totalNews: {
+                        $size: "$news_cards"
+                    }
+                }
+            },
+
+            {
+                $set: {
+                    news_cards: {
+                        $slice: [
+                            "$news_cards",
+                            skip,
+                            limit
+                        ]
+                    }
+                }
+            },
+
+            {
+                $lookup: {
+                    from: "media",
+                    localField: "news_cards.media_id",
+                    foreignField: "_id",
+                    as: "news_media"
+                }
+            },
+
+            {
+                $project: {
+                    _id: 1,
+                    route: 1,
+                    title: 1,
+                    description: 1,
+
+                    container: 1,
+                    container_style: 1,
+
+                    content: 1,
+                    content_style: 1,
+
+                    news_cards: 1,
+                    news_media: 1,
+
+                    totalNews: 1
+                }
+            }
+        ]);
+
+        if (!section) {
+            throw new NotFoundError(
+                "News section not found or inactive"
+            );
+        }
+
+        const totalPages = Math.ceil(
+            section.totalNews / limit
+        );
+
+        res.status(200).json({
+            news: section,
+
+            pagination: {
+                page,
+                limit,
+                totalNews: section.totalNews,
+                totalPages,
+                hasMore: page < totalPages
+            }
+        });
+
+    } catch (err) {
+        next(err);
+    }
+};
+
+///////////////////// user side landstore landing page////////////////////////
+export const get_all_sections = async (req, res, next) => {
+    try {
+        const cardPage = Math.max(
+            Number(req.query.cardPage) || 1,
+            1
+        );
+
+        const cardLimit = Math.max(
+            Number(req.query.cardLimit) || 10,
+            1
+        );
+
+        const cardSkip = (cardPage - 1) * cardLimit;
+
+
+        const sections = await state_sectionModel.aggregate([
+            {
+                $match: {
+                    status: "active"
+                }
+            },
+            // {
+            //     $sort: {
+            //         order: 1
+            //     }
+            // },
+            {
+                $lookup: {
+                    from: "containerstyles",
+                    localField: "_id",
+                    foreignField: "state_section_id",
+                    as: "container"
+                }
+            },
+
+            {
+                $lookup: {
+                    from: "styles",
+                    localField: "container.style_id",
+                    foreignField: "_id",
+                    as: "container_style"
+                }
+            },
+
+            {
+                $lookup: {
+                    from: "contentstyles",
+                    localField: "_id",
+                    foreignField: "state_section_id",
+                    as: "content"
+                }
+            },
+            {
+                $lookup: {
+                    from: "carddatas",
+                    localField: "content.card_data_id",
+                    foreignField: "_id",
+                    as: "content_data"
+                }
+            },
+
+            {
+                $lookup: {
+                    from: "styles",
+                    localField: "content.style_id",
+                    foreignField: "_id",
+                    as: "content_style"
+                }
+            },
+
+            {
+                $lookup: {
+                    from: "media",
+                    localField: "content.media_id",
+                    foreignField: "_id",
+                    as: "content_media"
+                }
+            },
+
+            {
+                $lookup: {
+                    from: "buttonstyles",
+                    localField: "_id",
+                    foreignField: "state_section_id",
+                    as: "button"
+                }
+            },
+            {
+                $lookup: {
+                    from: "styles",
+                    localField: "button.style_id",
+                    foreignField: "_id",
+                    as: "button_style"
+                }
+            },
+            {
+                $lookup : {
+                    from : "testimonials",
+                    localField : "content._id",
+                    foreignField : "content_id",
+                    as : "testimonial_cards"
+                }
+            },
+
+            {
+                $lookup : {
+                    from : "styles",
+                    localField : "testimonial_cards.style_id",
+                    foreignField : "_id",
+                    as : "testimonial_cards_style"
+                }
+            },
+
+            {
+                $lookup : {
+                    from : "menus",
+                    localField : "content._id",
+                    foreignField : "content_id",
+                    as : "menu_cards"
+                }
+            },
+
+            {
+                $lookup : {
+                    from : "styles",
+                    localField : "menu_cards.style_id",
+                    foreignField : "_id",
+                    as : "menu_cards_style"
+                }
+            },
+            {
+                $lookup : {
+                    from : "cardstyles",
+                    localField : "content._id",
+                    foreignField : "content_id", 
+                    as : "cards"
+                }
+            },
+            {
+                $lookup: {
+                    from: "styles",
+                    localField: "cards.style_id",
+                    foreignField: "_id",
+                    as: "card_styles"
+                }
+            },
+            {
+                $lookup : {
+                    from : "cardcategorys",
+                    localField : "content._id",
+                    foreignField : "content_id", 
+                    as : "cards_category"
+                }
+            },
+            {
+                $lookup: {
+                    from: "cardstyles",
+                    localField: "cards_category._id",
+                    foreignField: "card_category_id",
+                    as: "category_cards"
+                }
+            },
+            {
+                $lookup: {
+                    from: "cardsdatas",
+                    localField: "category_cards.card_data_id",
+                    foreignField: "_id",
+                    as: "category_cards_data"
+                }
+            },
+            {
+                $lookup: {
+                    from: "cardmetas",
+                    localField: "category_cards._id",
+                    foreignField: "card_id",
+                    as: "category_cards_meta_data"
+                }
+            },
+
+            {
+                $lookup: {
+                    from: "media",
+                    localField: "category_cards.media_id",
+                    foreignField: "_id",
+                    as: "category_cards_media"
+                }
+            },
+            {
+                $lookup: {
+                    from: "styles",
+                    localField: "category_cards.style_id",
+                    foreignField: "_id",
+                    as: "category_cards_style"
+                }
+            },
+            {
+                $lookup: {
+                    from: "icons",
+                    localField: "cards._id",
+                    foreignField: "card_id",
+                    as: "card_icon"
+                }
+            },
+            {
+                $lookup: {
+                    from: "carddatas",
+                    localField: "cards.card_data_id",
+                    foreignField: "_id",
+                    as: "card_data"
+                }
+            },
+            {
+                $project: {
+                    _id: 1,
+                    route: 1,
+                    title: 1,
+                    description: 1,
+                    status: 1,
+                    order: 1,
+                    container: {
+                        alignment :  1,
+                    },
+                    container_style: {
+                        padding : 1,
+                        background_color : 1
+                    },
+                    content: {
+                        cards_gap :  1,
+                        cop_right : 1
+                    },
+                    content_style: {
+                        padding :  1 
+                    },
+                    content_media: {
+                        media_url : 1 ,
+                        public_id : 1
+                    },
+                    content_data : {
+                        heading : 1 ,
+                        heading_alignment : 1 ,
+                        heading_color : 1 ,
+                        sub_heading : 1 ,
+                        sub_heading_alignment : 1 ,
+                        sub_heading_color : 1 ,
+                    },
+                    cards_category : {
+                        _id : 1  ,
+                        category_name : 1
+                    } ,
+                    category_cards:  {
+                        _id : 1 ,
+                        card_name : 1 ,
+                        createdAt : 1 
+                    },
+                    category_cards_data: {
+                        heading : 1 ,
+                        heading_color : 1 ,
+                        heading_alignment : 1 ,
+                        description : 1 ,
+                        description_color : 1 ,
+                        description_alignment : 1 ,
+                    } ,
+                    category_cards_media:  {
+                        media_url : 1 ,
+                        public_id : 1 
+                    },
+                    category_cards_style:  {
+                        padding  : 1 ,
+                        background_color : 1 ,
+                        border_color :  1
+                    },
+                    category_cards_meta_data: {
+                        link :  1 ,
+                        link_color :  1 ,
+                        link_alignment :  1 ,
+                        date : 1 ,
+                        date_color : 1 ,
+                        date_alignment : 1 ,
+                        tag :  1
+                    },
+                    testimonial_cards : {
+                        testimonial_name : 1 ,
+                        testimonial : 1 ,
+                        testimonial_color : 1 ,
+                        testimonial_alignment : 1 ,
+                        customer : 1 ,
+                        customer_alignment : 1 ,
+                        customer_color : 1 ,
+                        username : 1 ,
+                        username_color : 1 ,
+                        username_alignment : 1 ,
+                    },
+                    testimonial_cards_style : {
+                        padding :  1 ,
+                        border_color : 1 ,
+                        border_color : 1
+                    } ,
+                    menu_cards : {
+                        menu : 1 ,
+                        menu_color : 1 ,
+                        menu_alignment : 1 ,
+                        link : 1 ,
+                        link_color : 1 ,
+                        link_alignment : 1 ,
+                    } ,
+                    menu_cards_style : {
+                        padding :  1,
+                        background : 1 ,
+                        border_color :  1
+                    } ,
+                    button: {
+                        button_text :  1,
+                        button_color : 1,
+                        button_link : 1,
+                    },  
+                    button_style :  {
+                        padding : 1 ,
+                        border_color : 1,
+                        background_color :  1
+                    },
+                    cards: {
+                        _id : 1
+                    },
+                    card_icon : {
+                        card_icon :1 ,
+                        icon_color : 1 ,
+                        icon_alignment : 1 
+                    },
+                    card_styles: {
+                        padding : 1,
+                        background_color : 1 ,
+                        border_color : 1 
+                    },
+                    card_data: {
+                        heading : 1 ,
+                        heading_color : 1 ,
+                        heading_alignment : 1 ,
+                        sub_heading : 1 ,
+                        sub_heading_color : 1 ,
+                        sub_heading_alignment : 1 ,
+                        description : 1 ,
+                        description_color : 1 ,
+                        description_alignment : 1 ,
+                    },
+                }
+            }
+
+        ]);
+        res.status(200).json({
+            sections,
+            pagination: {
+                cardPage,
+                cardLimit
+            }
+        });
+    } catch (err) {
+        next(err);
+    }
+};

@@ -5,6 +5,7 @@ const state_section_schema = new mongoose.Schema({
     title :  { type : String , required : true},
     status :  { type : String , required : true , enum: ["active" , "inactive"] , default : "active"},
     description :  { type : String , required : true },
+    order : {type : Number , required : true },
     admin_id : { type : mongoose.Schema.Types.ObjectId , required : true  , ref : "Admin"}
     
 }, { timestamps : true })

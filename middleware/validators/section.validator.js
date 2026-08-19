@@ -278,3 +278,19 @@ export const news_card_validator = [
     .trim()
     .notEmpty().withMessage("Please enter date alignment "),
 ]
+
+export const card_icon_validator = [
+    body("card_icon")
+    .trim()
+    .notEmpty().withMessage(" Please enter card svg "),
+
+    body("icon_color")
+    .trim()
+    .notEmpty().withMessage(" Please provide icon color ").bail()
+    .matches(/^#[0-9A-Fa-f]{6}$/).withMessage("Icon color code must as e.g. #ffffff"),
+
+    body("icon_alignment")
+    .trim()
+    .notEmpty().withMessage(" Please provide icon alignment")
+    .isIn(["center" , "left" , "right"])
+]

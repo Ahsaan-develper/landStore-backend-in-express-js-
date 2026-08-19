@@ -5,8 +5,9 @@ const content_style_schema = new mongoose.Schema({
     media_id : { type : mongoose.Schema.Types.ObjectId , default : null , ref : "Media"},
     style_id : { type : mongoose.Schema.Types.ObjectId , default : null , ref : "Style"},
     card_data_id : { type : mongoose.Schema.Types.ObjectId , default: null , ref : "CardData"},
-    card_gap : { type : String  , required : true  , default : "0%" ,  },
-    copy_right : { type : String  , default : null},
+    card_gap : { type : String   },
+    is_deleted : { type : Boolean , default : false},
+    copy_right : { type : String  },
 } , { timestamps : true });
 
 content_style_schema.index({ state_section_id :  1})

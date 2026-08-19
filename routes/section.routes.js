@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { authorize, verify_token } from "../middleware/jwt.middleware.js";
-import { content_statistic_update, create_browse_map_content, create_button, create_category, create_container, create_footer_content, create_header_section, create_menu_card, create_news, create_section, create_statistic_card, create_statistic_content, create_testimonial_card, delete_cards, get_all_section, get_browse_content, get_button, get_container, get_footer_content, get_hero_section, get_news_content , get_news_section_user, get_reviews_content, get_single_cards, get_single_news_detail, get_single_testimonial_card, get_statistic_content, get_testimonial_content, section_active_inactive, single_menu_card, single_news_category_all_cards, state_container_data_updated, statistic_card_update, update_button, update_card_category_name, update_menu_card, update_testimonial_card } from "../controller/section.controller.js";
-import {  card_data_validator, card_style_validator, create_button_validator, create_container_validator, create_menu_card_validator, create_news_category_validator, create_section_validator, create_statistic_card_validator, create_statistic_content_validator, create_testimonial_card_validator, news_card_validator, section_id_validator, section_padding_validator, section_query_id_validator } from "../middleware/validators/section.validator.js";
+import { content_statistic_update, create_browse_map_content, create_button, create_category, create_container, create_footer_content, create_header_section, create_menu_card, create_news, create_section, create_statistic_card, create_statistic_content, create_testimonial_card, delete_cards, get_all_section,  get_all_sections,  get_browse_content, get_browse_map_section, get_button, get_container, get_footer_content, get_footer_section, get_hero_section, get_news_content , get_news_section, get_news_section_user, get_reviews_content, get_single_cards, get_single_news_detail, get_single_testimonial_card, get_statistic_content, get_statistics_section, get_testimonial_content, get_testimonial_section, get_why_landstore, section_active_inactive, single_menu_card, single_news_category_all_cards, state_container_data_updated, statistic_card_update, update_button, update_card_category_name, update_menu_card, update_testimonial_card } from "../controller/section.controller.js";
+import {  card_data_validator, card_icon_validator, card_style_validator, create_button_validator, create_container_validator, create_menu_card_validator, create_news_category_validator, create_section_validator, create_statistic_card_validator, create_statistic_content_validator, create_testimonial_card_validator, news_card_validator, section_id_validator, section_padding_validator, section_query_id_validator } from "../middleware/validators/section.validator.js";
 import { HandleValidationError } from "../middleware/validators/handleValidationError.js";
 import { upload_footer_logo_to_multer, upload_image_video, upload_img_to_multer } from "../middleware/multer.middleware.js";
 
@@ -37,7 +37,7 @@ section_router.post("/statistic/:section_id" , verify_token, authorize("super_ad
 section_router.get("/statistic_content" , verify_token, authorize("super_admin" , "section_admin") , section_query_id_validator , HandleValidationError ,get_statistic_content  )
 
 // create statistic_card
-section_router.post("/statistic_card/:section_id" , verify_token, authorize("super_admin" , "section_admin") , section_id_validator , card_data_validator , card_style_validator , create_statistic_card_validator, HandleValidationError ,create_statistic_card  )
+section_router.post("/statistic_card/:section_id" , verify_token, authorize("super_admin" , "section_admin") , section_id_validator , card_icon_validator, card_data_validator , card_style_validator , create_statistic_card_validator, HandleValidationError ,create_statistic_card  )
 
 // get single cards 
 
@@ -105,7 +105,28 @@ section_router.get("/news_section/:section_id" , verify_token, authorize("super_
 
 // get hero section data
 section_router.get("/hero_section/:section_id" , verify_token, authorize("super_admin" , "section_admin")  ,  section_id_validator   , HandleValidationError , get_hero_section  )
- 
+
+// get whole statistic state
+section_router.get("/statistic_section/:section_id" , verify_token, authorize("super_admin" , "section_admin")  ,  section_id_validator   , HandleValidationError , get_statistics_section  )
+
+// get why landstore works 
+section_router.get("/why_landstore_section/:section_id" , verify_token, authorize("super_admin" , "section_admin")  ,  section_id_validator   , HandleValidationError , get_why_landstore  )
+
+// get testimonial content 
+section_router.get("/testimonial_section/:section_id" , verify_token, authorize("super_admin" , "section_admin")  ,  section_id_validator   , HandleValidationError , get_testimonial_section  )
+
+// get browse sections
+section_router.get("/browse_map_section/:section_id" , verify_token, authorize("super_admin" , "section_admin")  ,  section_id_validator   , HandleValidationError , get_browse_map_section  )
+
+// get footer section 
+section_router.get("/footer_section/:section_id" , verify_token, authorize("super_admin" , "section_admin")  ,  section_id_validator   , HandleValidationError , get_footer_section  )
+
+// get news sections 
+section_router.get("/news_section/:section_id" , verify_token, authorize("super_admin" , "section_admin")  ,  section_id_validator   , HandleValidationError , get_news_section  )
+
+// get all sections for user landing page
+section_router.get("/landing_page" , HandleValidationError , get_all_sections  )
+
 
 
 // update section status toggle 
@@ -138,6 +159,5 @@ section_router.patch("/category_name_update/:section_id" , verify_token , author
 
 
 
-
+// delete the card
 section_router.delete("/delete_card/:section_id" , verify_token , authorize("super_admin" , "section_admin") , section_id_validator , delete_cards)
-

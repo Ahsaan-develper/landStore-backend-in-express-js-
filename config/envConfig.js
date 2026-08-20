@@ -11,5 +11,8 @@ export const _config = {
     CLOUDINARY_NAME : process.env.CLOUDINARY_NAME,
     ACCESS_TOKEN : process.env.ACCESS_TOKEN,
     REFRESH_TOKEN : process.env.REFRESH_TOKEN,
-    RESEND_API_KEY :  process.env.RESEND_API_KEY
+    RESEND_API_KEY :  process.env.RESEND_API_KEY,
+    EMAIL_APP_NAME :  process.env.EMAIL_APP_NAME,
+    SENDING_EMAIL : process.env.SENDING_EMAIL,
+    FRONTEND_URL : process.env.FRONTEND_URL
 }

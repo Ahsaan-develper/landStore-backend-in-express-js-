@@ -3771,6 +3771,7 @@ export const get_news_section = async (req, res, next) => {
 };
 
 ///////////////////// user side landstore landing page////////////////////////
+
 export const get_all_sections = async (req, res, next) => {
     try {
         const cardPage = Math.max(
@@ -3814,42 +3815,6 @@ export const get_all_sections = async (req, res, next) => {
                     as: "container_style"
                 }
             },
-
-            {
-                $lookup: {
-                    from: "contentstyles",
-                    localField: "_id",
-                    foreignField: "state_section_id",
-                    as: "content"
-                }
-            },
-            {
-                $lookup: {
-                    from: "carddatas",
-                    localField: "content.card_data_id",
-                    foreignField: "_id",
-                    as: "content_data"
-                }
-            },
-
-            {
-                $lookup: {
-                    from: "styles",
-                    localField: "content.style_id",
-                    foreignField: "_id",
-                    as: "content_style"
-                }
-            },
-
-            {
-                $lookup: {
-                    from: "media",
-                    localField: "content.media_id",
-                    foreignField: "_id",
-                    as: "content_media"
-                }
-            },
-
             {
                 $lookup: {
                     from: "buttonstyles",
@@ -3867,6 +3832,39 @@ export const get_all_sections = async (req, res, next) => {
                 }
             },
             {
+                $lookup: {
+                    from: "contentstyles",
+                    localField: "_id",
+                    foreignField: "state_section_id",
+                    as: "content"
+                }
+            },
+            {
+                $lookup: {
+                    from: "carddatas",
+                    localField: "content.card_data_id",
+                    foreignField: "_id",
+                    as: "content_data"
+                }
+            },
+            {
+                $lookup: {
+                    from: "styles",
+                    localField: "content.style_id",
+                    foreignField: "_id",
+                    as: "content_style"
+                }
+            },
+            {
+                $lookup: {
+                    from: "media",
+                    localField: "content.media_id",
+                    foreignField: "_id",
+                    as: "content_media"
+                }
+            },
+            
+            {
                 $lookup : {
                     from : "testimonials",
                     localField : "content._id",
@@ -3874,7 +3872,6 @@ export const get_all_sections = async (req, res, next) => {
                     as : "testimonial_cards"
                 }
             },
-
             {
                 $lookup : {
                     from : "styles",
@@ -3883,7 +3880,6 @@ export const get_all_sections = async (req, res, next) => {
                     as : "testimonial_cards_style"
                 }
             },
-
             {
                 $lookup : {
                     from : "menus",
@@ -3892,7 +3888,6 @@ export const get_all_sections = async (req, res, next) => {
                     as : "menu_cards"
                 }
             },
-
             {
                 $lookup : {
                     from : "styles",
@@ -3907,6 +3902,22 @@ export const get_all_sections = async (req, res, next) => {
                     localField : "content._id",
                     foreignField : "content_id", 
                     as : "cards"
+                }
+            },
+            {
+                $lookup: {
+                    from: "icons",
+                    localField: "cards._id",
+                    foreignField: "card_id",
+                    as: "card_icon"
+                }
+            },
+            {
+                $lookup: {
+                    from: "carddatas",
+                    localField: "cards.card_data_id",
+                    foreignField: "_id",
+                    as: "card_data"
                 }
             },
             {
@@ -3935,7 +3946,7 @@ export const get_all_sections = async (req, res, next) => {
             },
             {
                 $lookup: {
-                    from: "cardsdatas",
+                    from: "carddatas",
                     localField: "category_cards.card_data_id",
                     foreignField: "_id",
                     as: "category_cards_data"
@@ -3949,7 +3960,6 @@ export const get_all_sections = async (req, res, next) => {
                     as: "category_cards_meta_data"
                 }
             },
-
             {
                 $lookup: {
                     from: "media",
@@ -3964,22 +3974,6 @@ export const get_all_sections = async (req, res, next) => {
                     localField: "category_cards.style_id",
                     foreignField: "_id",
                     as: "category_cards_style"
-                }
-            },
-            {
-                $lookup: {
-                    from: "icons",
-                    localField: "cards._id",
-                    foreignField: "card_id",
-                    as: "card_icon"
-                }
-            },
-            {
-                $lookup: {
-                    from: "carddatas",
-                    localField: "cards.card_data_id",
-                    foreignField: "_id",
-                    as: "card_data"
                 }
             },
             {
@@ -3999,7 +3993,7 @@ export const get_all_sections = async (req, res, next) => {
                     },
                     content: {
                         cards_gap :  1,
-                        cop_right : 1
+                        // cop_right : 1
                     },
                     content_style: {
                         padding :  1 
@@ -4092,17 +4086,18 @@ export const get_all_sections = async (req, res, next) => {
                         background_color :  1
                     },
                     cards: {
-                        _id : 1
+                        _id : 1 ,
+                        card_name : 1
                     },
                     card_icon : {
                         card_icon :1 ,
                         icon_color : 1 ,
-                        icon_alignment : 1 
+                        icon_alignment : 1
                     },
                     card_styles: {
                         padding : 1,
                         background_color : 1 ,
-                        border_color : 1 
+                        border_color : 1
                     },
                     card_data: {
                         heading : 1 ,
@@ -4117,7 +4112,6 @@ export const get_all_sections = async (req, res, next) => {
                     },
                 }
             }
-
         ]);
         res.status(200).json({
             sections,

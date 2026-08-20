@@ -41,7 +41,6 @@ const start_server = async( )=>{
     })
     }catch( err ){
         process.exit(1);
-        InternalServerError( err );
     }
 }
 start_server();

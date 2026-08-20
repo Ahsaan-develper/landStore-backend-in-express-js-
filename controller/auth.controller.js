@@ -11,94 +11,151 @@ import bcrypt from "bcrypt";
 import companyDetailsModel from "../models/companyDetails.model.js";
 import mongoose from "mongoose";
 import { linkVisitorToUser } from "../utils/make_visitor_user.js";
-
-
+import { request_email_verification, request_password_reset, update_password, verify_email } from "../services/auth.service.js";
 export const user_register = async (req, res, next) => {
+
+    const session = await mongoose.startSession();
+
     try {
-        const { fullname, email, password, phone_number, IC } = req.body;
 
-        const existing_user = await usersModel.findOne({ email }).select("_id status").lean();
-        if (existing_user) {
-            if (existing_user.status === 'active') throw new ConflictError("User email already register");
-
-            await usersModel.findByIdAndUpdate(
-                existing_user._id,
-                { $set: { status: 'active' } },
-                { new: true }
-            );
-            
-            return res.status(200).json({
-                data: { message: "User account is reactivated !!!" }
-            });
-        }
-
-        const [user_code, hashed_password, user_id] = await Promise.all([
-            user_code_generator(),
-            bcrypt.hash(password, 10),
-            Promise.resolve(new mongoose.Types.ObjectId()) 
-        ]);
-
-       const session = await mongoose.startSession();
-
-try {
-
-    session.startTransaction();
-
-    const user = await usersModel.create(
-        [{
-            _id: user_id,
+        const {
             fullname,
             email,
-            password: hashed_password,
-            status: "active",
-            role: "individual",
-            user_code
-        }],
-        { session }
-    );
-
-    await userDetailModel.create(
-        [{
-            user_id,
+            password,
             phone_number,
             IC
-        }],
-        { session }
-    );
+        } = req.body;
+        const existing_user = await usersModel
+            .findOne({ email })
+            .select("_id fullname email status is_verify")
+            .lean();
 
-    await session.commitTransaction();
+        if (existing_user) {
+            if (
+                existing_user.status === "active" &&
+                existing_user.is_verify === true
+            ) {
+                throw new ConflictError(
+                    "User email already registered"
+                );
+            }
+            if (existing_user.status !== "active") {
+                await usersModel.findByIdAndUpdate(
+                    existing_user._id,
+                    {
+                        $set: {
+                            status: "active"
+                        }
+                    }
+                );
+            }
+            if (existing_user.is_verify === false) {
+                await request_email_verification({
+                    userId: existing_user._id,
+                    userEmail: existing_user.email,
+                    userName: existing_user.fullname
+                });
+                return res.status(200).json({
+                    data: {
+                        message:
+                            "Your email is not verified. A new verification link has been sent to your email."
+                    }
+                });
+            }
+            return res.status(200).json({
+                data: {
+                    message:
+                        "User account has been reactivated."
+                }
+            });
+        }
+        const [
+            user_code,
+            hashed_password,
+            user_id
+        ] = await Promise.all([
+            user_code_generator(),
+            bcrypt.hash(password, 10),
+            Promise.resolve(
+                new mongoose.Types.ObjectId()
+            )
+        ]);
+        session.startTransaction();
+        const user = await usersModel.create(
+            [
+                {
+                    _id: user_id,
+                    fullname,
+                    email,
+                    password: hashed_password,
+                    status: "active",
+                    email_verified: false,
+                    role: "individual",
+                    user_code
+                }
+            ],
+            {
+                session
+            }
+        );
 
-    await linkVisitorToUser(req, user[0]._id);
 
-    return res.status(201).json({
-        data: user[0]
-    });
-
-} catch (err) {
-
-    await session.abortTransaction();
-    throw err;
-
-} finally {
-
-    session.endSession();
-
-}
-        await  linkVisitorToUser(req , user._id)
-
+        await userDetailModel.create(
+            [
+                {
+                    user_id,
+                    phone_number,
+                    IC
+                }
+            ],
+            {
+                session
+            }
+        );
+        await session.commitTransaction();
+        await linkVisitorToUser(
+            req,
+            user[0]._id
+        );
+        // Send verification email
+        await request_email_verification({
+            userId: user[0]._id,
+            userEmail: user[0].email,
+            userName: user[0].fullname
+        });
         return res.status(201).json({
             data: {
-                _id          : user._id,
-                fullname     : user.fullname,
-                email        : user.email,
-                role         : user.role,
+                _id: user[0]._id,
+                fullname: user[0].fullname,
+
+                email: user[0].email,
+
+                role: user[0].role,
+
                 phone_number,
-                IC
+
+                IC,
+
+                email_verified: false
             }
+
         });
 
+
     } catch (err) {
+
+        if (session.inTransaction()) {
+
+            await session.abortTransaction();
+
+        }
+
         next(err);
+
+    } finally {
+
+        await session.endSession();
+
     }
 };
 
@@ -227,7 +284,7 @@ export const user_login = async ( req , res , next )=>{
         const { email , password } = req.body;
         const user = await usersModel.findOne({ email }).select("_id fullname email password status role is_verify").lean();
         if ( !user ) throw new UnauthorizedError("Email is incorrect ");
-          if (user.status !== "active")
+        if (user.status !== "active")
             throw new UnauthorizedError("Your account is currently inactive. Please contact support.");
         if ( !user.is_verify ) throw new UnauthorizedError("Please verify your email ");
         const is_match = await bcrypt.compare(password , user.password);
@@ -238,7 +295,7 @@ export const user_login = async ( req , res , next )=>{
             httpOnly : true ,
             maxAge : 7 * 24 * 60 * 60 * 1000
         });
-         res.cookie("access_token"  , access_token, {
+        res.cookie("access_token"  , access_token, {
             httpOnly : true ,
             maxAge : 5 * 60 * 60 * 1000
         })
@@ -285,7 +342,6 @@ export const get_user_profile = async (req, res, next) => {
     try {
         const user_id =req.user.sub;
 
-        // First fetch user alone — no point running other queries if user fails checks
         const user = await usersModel
             .findById(user_id)
             .select("_id fullname email role status is_verify media_id")
@@ -382,10 +438,9 @@ export const update_user = async (req, res, next) => {
             return res.status(200).json({ data: { message: "Nothing to update" } });
         }
 
-        // run both in parallel
+
         const [updated_detail, updated_media] = await Promise.all([
 
-            // update phone number
             Object.keys(user_detail_fields).length
                 ? userDetailModel.findOneAndUpdate(
                     { user_id },
@@ -393,7 +448,6 @@ export const update_user = async (req, res, next) => {
                     { new: true, select: 'phone_number' }
                 ).lean()
                 : null,
-
             
             Object.keys(media_fields).length
                 ? user.media_id
@@ -403,7 +457,6 @@ export const update_user = async (req, res, next) => {
                         { $set: media_fields },
                         { new: true, select: 'media_url media_type media_name' }
                     ).lean()
-
                     : mediaModel.create(media_fields).then(async (media) => {
                         await usersModel.findByIdAndUpdate(
                             user_id,
@@ -492,7 +545,55 @@ export const logout = async (req, res, next) => {
         next(err);
     }
 };
+// reset password
+
+export const forget_password = async (req, res, next) => {
+
+    try {
+
+        const { email } = req.body;
+        await request_password_reset(email);
+        return res.status(200).json({
+            success: true,
+            message:
+                "Password reset link has been sent, Please check your email."
+        });
+
+    } catch (err) {
+
+        next(err);
+
+    }
+};
 
 
-// reset password 
+// update password after reset it 
 
+export const reset_password = async (req, res, next) => {
+    try {
+        const { token, password } = req.body;
+        await update_password(token, password);
+        return res.status(200).json({
+            success: true,
+            message: "Password has been reset successfully"
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+// verify email 
+
+export const user_verify_email= async (req, res, next) => {
+
+    try {
+        const { token } = req.query;
+        await verify_email(token);
+        return res.status(200).json({
+            success: true,
+            message: "Email verified successfully"
+        });
+    } catch (err) {
+        next(err);
+    }
+};

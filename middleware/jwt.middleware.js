@@ -47,6 +47,147 @@ return next(new UnauthorizedError("User Logout, please login again"));    }
 };
 
 
+export const verify_socket_token = async (socket, next) => {
+
+    try {
+
+        let token = null;
+
+        if (socket.handshake.auth?.token) {
+
+            token = socket.handshake.auth.token;
+
+        }
+    
+        if (!token) {
+
+            const authHeader =
+                socket.handshake.headers.authorization;
+
+            if (
+                authHeader &&
+                authHeader.startsWith("Bearer ")
+            ) {
+
+                token =
+                    authHeader.substring(7);
+
+            }
+
+        }
+
+        if (!token) {
+
+            const cookieHeader =
+                socket.handshake.headers.cookie;
+
+
+
+            if (cookieHeader) {
+                if (
+                    cookieHeader.startsWith(
+                        "access_token="
+                    )
+                ) {
+
+                    token =
+                        cookieHeader
+                            .substring(
+                                "access_token=".length
+                            )
+                            .split(";")[0];
+
+                }
+
+                else {
+
+                    token =
+                        cookieHeader
+                            .split(";")[0]
+                            .trim();
+
+                }
+
+            }
+
+        }
+
+        if (!token) {
+
+            return next(
+                new Error(
+                    "User Logout, please login again"
+                )
+            );
+        }
+
+        
+        const decoded =
+            jwt.verify(
+                token,
+                _config.ACCESS_TOKEN
+            );
+
+        const blacklisted =
+            await is_blackList(token);
+        if (blacklisted) {
+
+            return next(
+                new Error(
+                    "Token is invalidated, please login again"
+                )
+            );
+
+        }
+
+        const user =
+            await usersModel
+                .findById(decoded.sub)
+                .select("status")
+                .lean();
+
+
+        if (!user) {
+
+            return next(
+                new Error(
+                    "User not found"
+                )
+            );
+
+        }
+
+
+        if (user.status === "inactive") {
+
+            return next(
+                new Error(
+                    "User is inactive"
+                )
+            );
+
+        }
+        socket.user = decoded;
+
+        next();
+
+
+    } catch (error) {
+
+        console.error(
+            "SOCKET AUTH ERROR:",
+            error.message
+        );
+
+        next(
+            new Error(
+                "Invalid authentication token"
+            )
+        );
+
+    }
+
+};
 // refresh handler 
 // export const refresh_handler = async (req, res, next) => {
 //     const refreshToken = req.cookies?.refreshToken;

@@ -1,7 +1,6 @@
 import messageModel from "../models/message.model.js";
 import enquiryModel from "../models/enquiry.model.js";
 import mediaModel from "../models/media.model.js";
-import mongoose from "mongoose";
 import { BadRequestError, ForbiddenError, NotFoundError } from "../utils/error.utils.js";
 import { get_media_type, upload_files_to_cloudinary } from "../services/cloudinary.service.js";
 export const send_message = async (req, res, next) => {
@@ -250,7 +249,6 @@ export const get_enquiry_messages = async (req, res, next) => {
 
         ]);
 
-        // Reverse so UI shows oldest -> newest within the page
         messages.reverse();
 
         return res.status(200).json({
@@ -272,4 +270,253 @@ export const get_enquiry_messages = async (req, res, next) => {
     } catch (err) {
         next(err);
     }
+};
+
+
+export const message_socket = (io, socket) => {
+
+    socket.on("sendMessage", async (data) => {
+
+        try {
+
+            const {
+                enquiry_id,
+                body = "",
+                files = []
+            } = data;
+
+            console.log("media");
+            
+            // --------------------------------
+            // Validate enquiry ID
+            // --------------------------------
+
+            if (!enquiry_id) {
+
+                return socket.emit("messageError", {
+                    message: "Enquiry ID is required."
+                });
+
+            }
+
+
+            // --------------------------------
+            // Validate message/file
+            // --------------------------------
+
+            if (
+                !body.trim() &&
+                files.length === 0
+            ) {
+
+                return socket.emit("messageError", {
+                    message:
+                        "Message or file is required."
+                });
+
+            }
+
+
+            // --------------------------------
+            // Check enquiry
+            // --------------------------------
+
+            const enquiry =
+                await enquiryModel.findById(
+                    enquiry_id
+                );
+
+
+            if (!enquiry) {
+
+                return socket.emit("messageError", {
+                    message:
+                        "Enquiry not found."
+                });
+
+            }
+
+
+            // --------------------------------
+            // Media document
+            // --------------------------------
+
+            let mediaDocument = null;
+
+
+            // --------------------------------
+            // Upload files
+            // --------------------------------
+
+            if (files.length > 0) {
+
+                const uploads =
+                    await upload_files_to_cloudinary(
+                        files,
+                        "messages"
+                    );
+
+
+                const media_urls = [];
+                const public_ids = [];
+                const media_types = [];
+                const media_names = [];
+
+
+                for (
+                    let i = 0;
+                    i < uploads.length;
+                    i++
+                ) {
+
+                    const upload =
+                        uploads[i];
+
+                    const file =
+                        files[i];
+
+
+                    media_urls.push(
+                        upload.url
+                    );
+
+
+                    public_ids.push(
+                        upload.public_id
+                    );
+
+
+                    media_types.push(
+                        get_media_type(
+                            upload.format
+                        )
+                    );
+
+
+                    media_names.push(
+                        file.name
+                    );
+
+                }
+
+
+                // --------------------------------
+                // Create Media document
+                // --------------------------------
+
+                mediaDocument =
+                    await mediaModel.create({
+
+                        media_url:
+                            media_urls,
+
+                        public_id:
+                            public_ids,
+
+                        media_type:
+                            media_types,
+
+                        media_name:
+                            media_names
+
+                    });
+
+            }
+
+
+            // --------------------------------
+            // Create Message
+            // --------------------------------
+
+            const message =
+                await messageModel.create({
+
+                    enquiry_id,
+
+                    sender_id:
+                        socket.user.sub,
+
+                    body:
+                        body.trim() || null,
+
+                    media_id:
+                        mediaDocument
+                            ? [mediaDocument._id]
+                            : [],
+
+                    is_read: false
+
+                });
+
+
+            // --------------------------------
+            // Emit message
+            // --------------------------------
+
+            io.to(
+                `enquiry:${enquiry_id}`
+            ).emit(
+                "newMessage",
+                {
+
+                    message_id:
+                        message._id,
+
+                    enquiry_id,
+
+                    sender_id:
+                        message.sender_id,
+
+                    body:
+                        message.body,
+
+                    media:
+                        mediaDocument
+                            ? {
+
+                                media_id:
+                                    mediaDocument._id,
+
+                                media_url:
+                                    mediaDocument.media_url,
+
+                                public_id:
+                                    mediaDocument.public_id,
+
+                                media_type:
+                                    mediaDocument.media_type,
+
+                                media_name:
+                                    mediaDocument.media_name
+
+                            }
+                            : null,
+
+                    is_read:
+                        message.is_read,
+
+                    createdAt:
+                        message.createdAt
+
+                }
+            );
+
+
+        } catch (error) {
+
+            console.error(
+                "Send message error:",
+                error
+            );
+
+
+            socket.emit("messageError", {
+                message:
+                    "Failed to send message."
+            });
+
+        }
+
+    });
+
 };

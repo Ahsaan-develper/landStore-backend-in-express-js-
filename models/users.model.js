@@ -4,7 +4,7 @@ const userSchema = new mongoose.Schema({
   fullname: String,
   email: { type: String, unique: true },
   password: { type : String , required : true },
-  status: { type: String, enum: ["inactive", "active", "suspended"] },
+  status: { type: String, enum: ["inactive", "active", "suspended" ] },
   media_id: { type: mongoose.Schema.Types.ObjectId, ref: "Media" , default : null },
   user_code: { type: String, unique: true },
   role: { type: String, enum: ["individual", "company", "keporasi"] , default : null},

@@ -13,9 +13,7 @@ import mongoose from "mongoose";
 import { linkVisitorToUser } from "../utils/make_visitor_user.js";
 import { request_email_verification, request_password_reset, update_password, verify_email } from "../services/auth.service.js";
 export const user_register = async (req, res, next) => {
-
     const session = await mongoose.startSession();
-
     try {
 
         const {
@@ -32,8 +30,7 @@ export const user_register = async (req, res, next) => {
 
         if (existing_user) {
             if (
-                existing_user.status === "active" &&
-                existing_user.is_verify === true
+                existing_user.status === "active" && existing_user.is_verify === true
             ) {
                 throw new ConflictError(
                     "User email already registered"
@@ -98,8 +95,6 @@ export const user_register = async (req, res, next) => {
                 session
             }
         );
-
-
         await userDetailModel.create(
             [
                 {
@@ -127,35 +122,20 @@ export const user_register = async (req, res, next) => {
             data: {
                 _id: user[0]._id,
                 fullname: user[0].fullname,
-
                 email: user[0].email,
-
                 role: user[0].role,
-
                 phone_number,
-
                 IC,
-
                 email_verified: false
             }
-
         });
-
-
     } catch (err) {
-
         if (session.inTransaction()) {
-
             await session.abortTransaction();
-
         }
-
         next(err);
-
     } finally {
-
         await session.endSession();
-
     }
 };
 
@@ -597,3 +577,5 @@ export const user_verify_email= async (req, res, next) => {
         next(err);
     }
 };
+
+

@@ -62,16 +62,20 @@ console.log(socket.id);
         socket
     );
 
+    notification_socket(
+        io,
+        socket
+    );
 
+    
     socket.on("disconnect", () => {
-
         console.log(
             "Socket disconnected:",
             socket.id
         );
-
     });
 
+    
 });
 
 

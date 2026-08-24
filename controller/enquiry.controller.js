@@ -4,7 +4,7 @@ import listingModel from "../models/listing.model.js";
 import mediaModel from "../models/media.model.js";
 import messageModel from "../models/message.model.js";
 import stateModel from "../models/state.model.js";
-import { createNotification } from "../services/notification.service.js";
+import { createAndSendNotification } from "../services/notification.service.js";
 import { NotificationTemplates } from "../template/notification.template.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../utils/error.utils.js";
 import { enquiry_code_generator } from "../utils/unique_code_generator.utils.js";
@@ -68,7 +68,7 @@ export const create_enquiry = async (req, res, next) => {
             enquiryCode: enquiry.enquiry_code
         });
 
-        await createNotification({
+        await createAndSendNotification({
             user_id,
             enquiry_id: enquiry._id,
             notifiable_type: "Enquiry",
@@ -405,7 +405,7 @@ export const change_enquiry_status = async (req, res, next) => {
         });
       
         
-        await createNotification({
+        await createAndSendNotification({
             user_id : enquiry.user_id,
             enquiry_id: enquiry._id,
             notifiable_type: "Enquiry",

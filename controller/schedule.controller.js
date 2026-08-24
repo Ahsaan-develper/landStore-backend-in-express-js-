@@ -3,7 +3,7 @@ import enquiryModel from "../models/enquiry.model.js";
 import scheduleModel from "../models/schedule.model.js";
 import { BadRequestError, NotFoundError } from "../utils/error.utils.js";
 import { NotificationTemplates } from "../template/notification.template.js";
-import { createNotification } from "../services/notification.service.js"
+import { createAndSendNotification } from "../services/notification.service.js"
 
 // make schedule
 export const make_schedule = async (req, res, next) => {
@@ -56,7 +56,7 @@ const template = NotificationTemplates.scheduleCreated({
     address: visit_address
 });
 
-await createNotification({
+await createAndSendNotification({
     user_id: enquiry.user_id, // Notify enquiry owner
     enquiry_id: enquiry._id,
     schedule_id: schedule._id,
@@ -130,7 +130,7 @@ export const change_schedule_status = async (req, res, next) => {
             newStatus: status
         });
 
-        await createNotification({
+        await createAndSendNotification({
             user_id: enquiry.user_id,
             enquiry_id: enquiry._id,
             schedule_id: schedule._id,

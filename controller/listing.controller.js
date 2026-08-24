@@ -14,7 +14,7 @@ import subDistrictModel from "../models/subDistrict.model.js";
 import locationModel from "../models/location.model.js";
 import {delete_file, delete_files_from_cloudinary, upload_files_to_cloudinary} from "../services/cloudinary.service.js"
 import { NotificationTemplates } from "../template/notification.template.js";
-import { createNotification } from "../services/notification.service.js";
+import { createAndSendNotification } from "../services/notification.service.js";
 
 
 export const create_listing = async (req, res, next) => {
@@ -140,7 +140,7 @@ export const create_listing = async (req, res, next) => {
             district : district_doc.district,
             status : "pending"
         })
-        await createNotification({
+        await createAndSendNotification({
 
     user_id: listing.user_id,
 
@@ -322,9 +322,9 @@ export const make_draft_by_user = async (req, res, next) => {
 
             tenure_type === "leasehold"
                 ? leaseholdDetailModel.create(
-                      [{ start_date, end_year }],
-                      { session: dbSession }
-                  )
+                    [{ start_date, end_year }],
+                    { session: dbSession }
+                )
                 : Promise.resolve([null]),
         ]);
 
@@ -384,7 +384,7 @@ export const make_draft_by_user = async (req, res, next) => {
             status: "pending",
         });
 
-        await createNotification({
+        await createAndSendNotification({
             user_id: listing[0].user_id,
             listing_id: listing[0]._id,
             notifiable_type: "Listing",
@@ -688,7 +688,6 @@ export const update_listing = async (req, res, next) => {
             );
         }
 
-        // ── Deal types ────────────────────────────────────────────────────
         if (req.body.dealType !== undefined) {
             const deal_types = Array.isArray(req.body.dealType)
                 ? req.body.dealType : [req.body.dealType];
@@ -699,7 +698,6 @@ export const update_listing = async (req, res, next) => {
             );
         }
 
-        // ── Feature tags ──────────────────────────────────────────────────
         if (req.body.feature_tags !== undefined) {
             const tags = Array.isArray(req.body.feature_tags)
                 ? req.body.feature_tags : [req.body.feature_tags];
@@ -721,7 +719,6 @@ export const update_listing = async (req, res, next) => {
             );
         }
 
-        // ── State / District / Sub-district ───────────────────────────────
         if (req.body.state_name !== undefined) {
             parallelTasks.state = stateModel.findByIdAndUpdate(
                 existing.state_id,
@@ -747,7 +744,7 @@ export const update_listing = async (req, res, next) => {
             );
         }
 
-        // ── Tenure ────────────────────────────────────────────────────────
+
         if (req.body.tenure_type !== undefined) {
             let leasehold_id = null;
             if (req.body.tenure_type === "leasehold") {
@@ -854,7 +851,7 @@ if (new_images.length || new_docs.length) {
             listingCode : updated.listing_code,
             status : "pending"
         })
-        await createNotification({
+        await createAndSendNotification({
 
     user_id : updated.user_id,
 
@@ -1306,7 +1303,7 @@ export const change_listing_status = async (req, res, next) => {
             oldStatus : oldStatus,
             newStatus : status
         });
-        await createNotification({
+        await createAndSendNotification({
 
     user_id: listing.user_id,
 
@@ -1808,7 +1805,7 @@ export const deactivate_listing = async (req, res, next) => {
             listingCode : listing.listing_code,
             status : "inactive"
         })
-        await createNotification({
+        await createAndSendNotification({
 
     user_id: listing.user_id,
 
@@ -1932,7 +1929,7 @@ export const publish_listing = async (req, res, next) => {
             listingCode : listing.listing_code,
             status : "pending"
         })
-        await createNotification({
+        await createAndSendNotification({
 
     user_id: listing.user_id,
 

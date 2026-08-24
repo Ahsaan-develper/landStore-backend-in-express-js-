@@ -285,12 +285,6 @@ export const message_socket = (io, socket) => {
                 files = []
             } = data;
 
-            console.log("media");
-            
-            // --------------------------------
-            // Validate enquiry ID
-            // --------------------------------
-
             if (!enquiry_id) {
 
                 return socket.emit("messageError", {
@@ -298,12 +292,6 @@ export const message_socket = (io, socket) => {
                 });
 
             }
-
-
-            // --------------------------------
-            // Validate message/file
-            // --------------------------------
-
             if (
                 !body.trim() &&
                 files.length === 0
@@ -315,12 +303,6 @@ export const message_socket = (io, socket) => {
                 });
 
             }
-
-
-            // --------------------------------
-            // Check enquiry
-            // --------------------------------
-
             const enquiry =
                 await enquiryModel.findById(
                     enquiry_id
@@ -335,19 +317,7 @@ export const message_socket = (io, socket) => {
                 });
 
             }
-
-
-            // --------------------------------
-            // Media document
-            // --------------------------------
-
             let mediaDocument = null;
-
-
-            // --------------------------------
-            // Upload files
-            // --------------------------------
-
             if (files.length > 0) {
 
                 const uploads =
@@ -355,37 +325,25 @@ export const message_socket = (io, socket) => {
                         files,
                         "messages"
                     );
-
-
                 const media_urls = [];
                 const public_ids = [];
                 const media_types = [];
                 const media_names = [];
-
-
                 for (
                     let i = 0;
                     i < uploads.length;
                     i++
                 ) {
-
                     const upload =
                         uploads[i];
-
                     const file =
                         files[i];
-
-
                     media_urls.push(
                         upload.url
                     );
-
-
                     public_ids.push(
                         upload.public_id
                     );
-
-
                     media_types.push(
                         get_media_type(
                             upload.format
@@ -398,12 +356,6 @@ export const message_socket = (io, socket) => {
                     );
 
                 }
-
-
-                // --------------------------------
-                // Create Media document
-                // --------------------------------
-
                 mediaDocument =
                     await mediaModel.create({
 
@@ -422,12 +374,6 @@ export const message_socket = (io, socket) => {
                     });
 
             }
-
-
-            // --------------------------------
-            // Create Message
-            // --------------------------------
-
             const message =
                 await messageModel.create({
 
@@ -447,12 +393,6 @@ export const message_socket = (io, socket) => {
                     is_read: false
 
                 });
-
-
-            // --------------------------------
-            // Emit message
-            // --------------------------------
-
             io.to(
                 `enquiry:${enquiry_id}`
             ).emit(
@@ -519,4 +459,152 @@ export const message_socket = (io, socket) => {
 
     });
 
+};
+
+
+
+
+export const enquiry_message_socket = (io, socket) => {
+    socket.on("joinEnquiry", async (data) => {
+        try {
+            const {
+                enquiry_id,
+                page = 1,
+                limit = 10
+            } = data;
+            if (!enquiry_id) {
+                return socket.emit("messageError", {
+                    message: "Enquiry ID is required."
+                });
+            }
+            const currentPage = Math.max(
+                Number(page) || 1,
+                1
+            );
+            const currentLimit = Math.min(
+                Math.max(Number(limit) || 10, 1),
+                50
+            );
+            const skip =
+                (currentPage - 1) * currentLimit;
+            const enquiry =
+                await enquiryModel.findById(enquiry_id)
+            if (!enquiry) {
+                return socket.emit("messageError", {
+                    message: "Enquiry not found."
+                });
+            }
+            const user_id = socket.user.sub;
+            const role = socket.user.role;
+            if (
+                role !== "super_admin" &&
+                role !== "enquiry_admin" &&
+                enquiry.user_id.toString() !== user_id
+            ) {
+                return socket.emit("messageError", {
+                    message:
+                        "You are not allowed to view this enquiry."
+                });
+            }
+            const room = `enquiry:${enquiry_id}`;
+            socket.join(room);
+            const totalMessages =
+                await messageModel.countDocuments({
+                    enquiry_id: enquiry._id
+                });
+            let messages =
+                await messageModel.aggregate([
+                    {
+                        $match: {
+                            enquiry_id: enquiry._id
+                        }
+                    },
+                    {
+                        $sort: {
+                            createdAt: -1
+                        }
+                    },
+                    {
+                        $skip: skip
+                    },
+                    {
+                        $limit: currentLimit
+                    },
+                    {
+                        $lookup: {
+                            from: "users",
+                            localField: "sender_id",
+                            foreignField: "_id",
+                            as: "sender"
+                        }
+                    },
+                    {
+                        $unwind: {
+                            path: "$sender",
+                            preserveNullAndEmptyArrays: true
+                        }
+                    },
+                    {
+                        $lookup: {
+                            from: "media",
+                            localField: "media_id",
+                            foreignField: "_id",
+                            as: "media"
+                        }
+                    },
+                    {
+                        $project: {
+                            _id: 0,
+                            message_id: "$_id",
+                            enquiry_id: 1,
+                            body: 1,
+                            is_read: 1,
+                            read_at: 1,
+                            createdAt: 1,
+                            updatedAt: 1,
+                            sender: {
+                                _id: "$sender._id",
+                                fullname: "$sender.fullname",
+                                email: "$sender.email",
+                                profile_image:
+                                    "$sender.profile_image",
+                                role: "$sender.role"
+                            },
+                            media: {
+                                $map: {
+                                    input: "$media",
+                                    as: "m",
+                                    in: {
+                                        media_id: "$$m._id",
+                                        media_url: "$$m.media_url",
+                                        media_type: "$$m.media_type",
+                                        media_name: "$$m.media_name"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                ]);
+            messages.reverse();
+            const hasMore =
+                currentPage * currentLimit < totalMessages;
+            socket.emit("enquiryMessages", {
+                enquiry_id,
+                page: currentPage,
+                limit: currentLimit,
+                totalMessages,
+                hasMore,
+                messages
+            });
+        } catch (error) {
+            console.error(
+                "Join enquiry error:",
+                error
+            );
+            socket.emit("messageError", {
+                message:
+                    "Failed to fetch enquiry messages."
+            });
+        }
+    });
 };

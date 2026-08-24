@@ -9,7 +9,7 @@ import userDetailModel from "../models/userDetail.model.js";
 import companyDetailsModel from "../models/companyDetails.model.js";
 import keporasiDetailModel from "../models/keporasiDetail.model.js";
 import { NotificationTemplates } from "../template/notification.template.js";
-import { createNotification } from "../services/notification.service.js";
+import { createAndSendNotification } from "../services/notification.service.js";
 
 // register super admin
 export const super_admin_register = async (req, res, next) => {
@@ -30,7 +30,6 @@ export const super_admin_register = async (req, res, next) => {
                 admin_role : "super_admin",
                 created_by : null
             });
-
             return res.status(201).json({
                 data: {
                     user_id    : existing_user._id,
@@ -221,7 +220,7 @@ export const get_user_by_admin_profile = async (req, res, next) => {
 
         if (!user)                    throw new NotFoundError("User not found");
 
-        const is_admin = ["super_admin", "admin", "moderator"].includes(user.role);
+        const is_admin = ["super_admin", "user_admin", ].includes(user.role);
 
         const [user_detail, extra, admin_detail] = await Promise.all([
             userDetailModel
@@ -365,7 +364,6 @@ export const change_user_status_by_admin = async (req, res, next) => {
             .select("_id role")
             .lean();
 
-        // Only super admin can suspend another admin
         if (admin && currentAdmin !== "super_admin") {
             throw new ForbiddenError(
                 "Only super admin can change another admin's status."
@@ -381,11 +379,7 @@ export const change_user_status_by_admin = async (req, res, next) => {
         if (!user) {
             throw new NotFoundError("User not found.");
         }
-
-        // ---------------- Notification ----------------
-
         let template;
-
         if (status === "suspended") {
             template = NotificationTemplates.accountSuspended();
         } else if (status === "active") {
@@ -393,7 +387,7 @@ export const change_user_status_by_admin = async (req, res, next) => {
         }
 
         if (template) {
-            await createNotification({
+            await createAndSendNotification({
                 user_id: user._id,
                 notifiable_type: "Account",
                 title: template.title,
@@ -418,7 +412,6 @@ export const change_user_status_by_admin = async (req, res, next) => {
 //  change admin role 
 export const change_admin_role_by_super_admin = async ( req , res , next )=>{
     try {
-        
         const {role} = req.body ;
         const {admin_id} = req.params;
         const current_admin = req.user.role;
@@ -436,8 +429,6 @@ export const change_admin_role_by_super_admin = async ( req , res , next )=>{
         next ( err );
     }
 }
-
-
 
 // get all admins
 export const get_all_admins = async (req, res, next) => {
@@ -488,7 +479,6 @@ export const get_all_admins = async (req, res, next) => {
                 }
             }
         ]);
-
         const admins = result[0].admins;
         const totalCount = result[0].totalCount[0]?.count || 0;
         const totalPages = Math.ceil(totalCount / limit);

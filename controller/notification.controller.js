@@ -238,3 +238,76 @@ export const get_single_notification = async (req, res, next) => {
         next(err);
     }
 };
+
+export const notification_socket = (io, socket) => {
+
+    socket.on("markNotificationAsRead", async (data) => {
+        try {
+            const { notification_id } = data;
+
+            if (!notification_id) {
+                return socket.emit("notificationError", {
+                    message: "Notification ID is required."
+                });
+            }
+            const user_id = socket.user.sub;
+            const notification = await userNotificationModel.findOneAndUpdate(
+                { _id: notification_id, user_id, is_read: false },
+                { $set: { is_read: true, read_at: new Date() } },
+                { new: true }
+            );
+            if (!notification) {
+                return socket.emit("notificationError", {
+                    message: "Notification not found or already read."
+                });
+            }
+            io.to(`user:${user_id}`).emit("notificationRead", {
+                user_notification_id: notification._id,
+                is_read: notification.is_read,
+                read_at: notification.read_at
+            });
+        } catch (error) {
+            console.error("Mark notification as read error:", error);
+            socket.emit("notificationError", {
+                message: "Failed to mark notification as read."
+            });
+        }
+    });
+
+    socket.on("markAllNotificationsAsRead", async () => {
+        try {
+            const user_id = socket.user.sub;
+            const read_at = new Date();
+
+            const result = await userNotificationModel.updateMany(
+                { user_id, is_read: false },
+                { $set: { is_read: true, read_at } }
+            );
+
+            io.to(`user:${user_id}`).emit("allNotificationsRead", {
+                is_read: true,
+                read_at,
+                updated_notifications: result.modifiedCount
+            });
+
+        } catch (error) {
+            console.error("Mark all notifications as read error:", error);
+            socket.emit("notificationError", {
+                message: "Failed to mark all notifications as read."
+            });
+        }
+    });
+}
+
+
+// utils/send_notification.js
+export const send_notification = (io, user_id, notification) => {
+    io.to(`user:${user_id}`).emit("newNotification", {
+        user_notification_id: notification.user_notification_id,
+        title:                notification.title,
+        message:              notification.message,
+        notifiable_type:      notification.notifiable_type,
+        is_read:              false,
+        createdAt:            new Date()
+    });
+};

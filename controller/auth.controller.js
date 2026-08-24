@@ -4,13 +4,16 @@ import koperasiModel from "../models/keporasiDetail.model.js";
 import userDetailModel from "../models/userDetail.model.js";
 import usersModel from "../models/users.model.js";
 import { delete_file, upload_file } from "../services/cloudinary.service.js";
-import { ConflictError, InternalServerError, NotFoundError, UnauthorizedError } from "../utils/error.utils.js"
+import { ConflictError, ForbiddenError, InternalServerError, NotFoundError, UnauthorizedError } from "../utils/error.utils.js"
 import { add_to_blacklist } from "../utils/logout.utils.js";
 import { user_code_generator } from "../utils/unique_code_generator.utils.js";
 import bcrypt from "bcrypt";
 import companyDetailsModel from "../models/companyDetails.model.js";
 import mongoose from "mongoose";
 import { linkVisitorToUser } from "../utils/make_visitor_user.js";
+
+
+
 import { request_email_verification, request_password_reset, update_password, verify_email } from "../services/auth.service.js";
 export const user_register = async (req, res, next) => {
     const session = await mongoose.startSession();
@@ -27,8 +30,10 @@ export const user_register = async (req, res, next) => {
             .findOne({ email })
             .select("_id fullname email status is_verify")
             .lean();
-
         if (existing_user) {
+            if (existing_user.status === "suspended") {
+                throw new ForbiddenError("Your account has been suspended by admin");
+            }
             if (
                 existing_user.status === "active" && existing_user.is_verify === true
             ) {
@@ -138,174 +143,297 @@ export const user_register = async (req, res, next) => {
         await session.endSession();
     }
 };
+export const keporasi_register = async (req, res, next) => {
+    const session = await mongoose.startSession();
+    try {
+        const {
+            fullname,
+            email,
+            password,
+            phone_number,
+            koperasi_name,
+            koperasi_reg_number
+        } = req.body;
+        const existing_user = await usersModel
+            .findOne({ email })
+            .select("_id fullname email status is_verify")
+            .lean();
+        if (existing_user) {
+            if (existing_user.status === "suspended") {
+                throw new ForbiddenError("Your account has been suspended by admin");
+            }
+            if (existing_user.status === "active" && existing_user.is_verify === true) {
+                throw new ConflictError("User email already registered");
+            }
+            if (existing_user.status === "inactive") {
+                await usersModel.findByIdAndUpdate(
+                    existing_user._id,
+                    { $set: { status: "active" } }
+                );
+            }
+            if (existing_user.is_verify === false) {
+                await request_email_verification({
+                    userId: existing_user._id,
+                    userEmail: existing_user.email,
+                    userName: existing_user.fullname
+                });
+                return res.status(200).json({
+                    data: {
+                        message:
+                            "Your email is not verified. A new verification link has been sent to your email."
+                    }
+                });
+            }
 
-
-export const keporasi_register = async ( req , res , next )=>{
-    try{
-        
-        const { fullname, email, password, phone_number , keporasi_name , keporasi_reg_number} = req.body;
-        const existing_user = await usersModel.findOne({ email }).select("_id status").lean();
-        if ( existing_user ){
-            if( existing_user.status === "active") throw new ConflictError(" User already register with this email ");
-            await usersModel.findByIdAndUpdate(existing_user._id , { $set : { status : "active"}} , { new : true });
             return res.status(200).json({
-                data: { message: "User account is reactivated !!!" }
+                data: { message: "User account has been reactivated." }
             });
-        };
+        }
 
-        const [ user_code , hashed_password , user_id ] = await Promise.all([
+        const [user_code, hashed_password, user_id] = await Promise.all([
             user_code_generator(),
             bcrypt.hash(password, 10),
             Promise.resolve(new mongoose.Types.ObjectId())
         ]);
-          const [user , keporasi , user_detail] = await Promise.all([
-            usersModel.create({
-                _id: user_id,
-                fullname,
-                email,
-                password: hashed_password,
-                status: "active",
-                role: "keporasi",
-                user_code
-            }),
-           
-            koperasiModel.create({
-                user_id,
-                keporasi_name,
-                keporasi_reg_number
-            }),
-             userDetailModel.create({
-                user_id,
-                phone_number,
-            })
+        session.startTransaction();
+        const [user, keporasi] = await Promise.all([
+            usersModel.create(
+                [
+                    {
+                        _id: user_id,
+                        fullname,
+                        email,
+                        password: hashed_password,
+                        status: "active",
+                        is_verify: false,
+                        role: "koperasi",
+                        user_code
+                    }
+                ],
+                { session }
+            ),
+            koperasiModel.create(
+                [{ user_id, koperasi_name, koperasi_reg_number }],
+                { session }
+            ),
+            userDetailModel.create(
+                [{ user_id, phone_number }],
+                { session }
+            )
         ]);
-                await  linkVisitorToUser(req , user._id)
-
+        await session.commitTransaction();
+        await linkVisitorToUser(req, user[0]._id);
+        await request_email_verification({
+            userId: user[0]._id,
+            userEmail: user[0].email,
+            userName: user[0].fullname
+        });
 
         return res.status(201).json({
             data: {
-                _id          : user._id,
-                fullname     : user.fullname,
-                email        : user.email,
-                role         : user.role,
-                keporasi_name : keporasi.keporasi_name
+                _id: user[0]._id,
+                fullname: user[0].fullname,
+                email: user[0].email,
+                role: user[0].role,
+                phone_number,
+                keporasi_name: keporasi[0].keporasi_name,
+                keporasi_reg_number: keporasi[0].keporasi_reg_number,
+                is_verify: false    // was missing
             }
         });
-
-    }catch ( err ){
-        next ( err );
+    } catch (err) {
+        if (session.inTransaction()) {
+            await session.abortTransaction();
+        }
+        next(err);
+    } finally {
+        await session.endSession();
     }
-}
+};
 
 
 // company register 
+export const company_register = async (req, res, next) => {
+    const session = await mongoose.startSession();
+    try {
+        const {
+            fullname,
+            email,
+            password,
+            phone_number,
+            company_name,
+            SSM_reg_number
+        } = req.body;
 
+        const existing_user = await usersModel
+            .findOne({ email })
+            .select("_id fullname email status is_verify")
+            .lean();
+        if (existing_user) {
+            if (existing_user.status === "suspended") {
+                throw new ForbiddenError("Your account has been suspended. Contact support.");
+            }
+            if (existing_user.status === "active" && existing_user.is_verify === true) {
+                throw new ConflictError("User email already registered");
+            }
+            if (existing_user.status === "inactive") {
+                await usersModel.findByIdAndUpdate(
+                    existing_user._id,
+                    { $set: { status: "active" } }
+                );
+            }
 
-export const company_register = async ( req , res , next )=>{
-    try{
-       
-        
-        const { fullname, email, password, phone_number , company_name , SSM_reg_number} = req.body;
-        const existing_user = await usersModel.findOne({ email }).select("_id status").lean();
-        if ( existing_user ){
-            if( existing_user.status === "active") throw new ConflictError(" User already register with this email ");
-            await usersModel.findByIdAndUpdate(existing_user._id , { $set : { status : "active"}} , { new : true });
+            if (existing_user.is_verify === false) {
+                await request_email_verification({
+                    userId: existing_user._id,
+                    userEmail: existing_user.email,
+                    userName: existing_user.fullname
+                });
+                return res.status(200).json({
+                    data: {
+                        message: "Your email is not verified. A new verification link has been sent to your email."
+                    }
+                });
+            }
+
             return res.status(200).json({
-                data: { message: "User account is reactivated !!!" }
+                data: { message: "User account has been reactivated." }
             });
-        };
+        }
 
-        const [ user_code , hashed_password , user_id ] = await Promise.all([
+        const [user_code, hashed_password, user_id] = await Promise.all([
             user_code_generator(),
             bcrypt.hash(password, 10),
             Promise.resolve(new mongoose.Types.ObjectId())
         ]);
-          const [user , company , user_detail] = await Promise.all([
-            usersModel.create({
-                _id: user_id,
-                fullname,
-                email,
-                password: hashed_password,
-                status: "active",
-                role: "company",
-                user_code
-            }),
-           
-            companyDetailsModel.create({
-                user_id,
-                company_name,
-                SSM_reg_number
-            }),
-             userDetailModel.create({
-                user_id,
-                phone_number,
-            })
+
+        session.startTransaction();
+        const [user, company] = await Promise.all([
+            usersModel.create(
+                [
+                    {
+                        _id: user_id,
+                        fullname,
+                        email,
+                        password: hashed_password,
+                        status: "active",
+                        is_verify: false,
+                        role: "company",
+                        user_code
+                    }
+                ],
+                { session }
+            ),
+            companyDetailsModel.create(
+                [{ user_id, company_name, SSM_reg_number }],
+                { session }
+            ),
+            userDetailModel.create(
+                [{ user_id, phone_number }],
+                { session }
+            )
         ]);
-                await  linkVisitorToUser(req , user._id)
+        await session.commitTransaction();
+
+        await linkVisitorToUser(req, user[0]._id);
+
+        await request_email_verification({
+            userId: user[0]._id,
+            userEmail: user[0].email,
+            userName: user[0].fullname
+        });
 
         return res.status(201).json({
             data: {
-                _id          : user._id,
-                fullname     : user.fullname,
-                email        : user.email,
-                role         : user.role,
-                company_name : company.company_name
+                _id: user[0]._id,
+                fullname: user[0].fullname,
+                email: user[0].email,
+                role: user[0].role,
+                phone_number,
+                company_name: company[0].company_name,
+                SSM_reg_number: company[0].SSM_reg_number,
+                is_verify: false
             }
         });
-
-    }catch ( err ){
-        next ( err );
+    } catch (err) {
+        if (session.inTransaction()) {
+            await session.abortTransaction();
+        }
+        next(err);
+    } finally {
+        await session.endSession();
     }
-}
-// login a user 
-
-export const user_login = async ( req , res , next )=>{
+};// login a user 
+export const user_login = async (req, res, next) => {
     try {
-        const { email , password } = req.body;
-        const user = await usersModel.findOne({ email }).select("_id fullname email password status role is_verify").lean();
-        if ( !user ) throw new UnauthorizedError("Email is incorrect ");
-        if (user.status !== "active")
-            throw new UnauthorizedError("Your account is currently inactive. Please contact support.");
-        if ( !user.is_verify ) throw new UnauthorizedError("Please verify your email ");
-        const is_match = await bcrypt.compare(password , user.password);
-        if ( !is_match ) throw new UnauthorizedError("Password is incorrect ");
-        const access_token = generate_access_token(user._id , user.role )
-        const refresh_token = generate_refresh_token(user._id , user.role )
-        res.cookie("refresh_token"  , refresh_token, {
-            httpOnly : true ,
-            maxAge : 7 * 24 * 60 * 60 * 1000
+        const { email, password } = req.body;
+
+        const user = await usersModel
+            .findOne({ email })
+            .select("_id fullname email password status role is_verify")
+            .lean();
+
+        if (!user) throw new UnauthorizedError("Invalid email or password");
+
+        if (user.status === "suspended") {
+            throw new ForbiddenError("Your account has been suspended. Contact support.");
+        }
+
+        if (user.status === "inactive") {
+            throw new UnauthorizedError("Your account is inactive. Please register again to reactivate.");
+        }
+
+        if (!user.is_verify) {
+            throw new UnauthorizedError("Please verify your email before logging in.");
+        }
+
+        const is_match = await bcrypt.compare(password, user.password);
+        if (!is_match) throw new UnauthorizedError("Invalid email or password");
+
+        const access_token = generate_access_token(user._id, user.role);
+        const refresh_token = generate_refresh_token(user._id, user.role);
+
+        res.cookie("refresh_token", refresh_token, {
+            httpOnly: true,
+            secure: is_production,
+            sameSite: is_production ? "strict" : "lax",
+            maxAge: 7 * 24 * 60 * 60 * 1000   
         });
-        res.cookie("access_token"  , access_token, {
-            httpOnly : true ,
-            maxAge : 5 * 60 * 60 * 1000
-        })
-        user.refresh_token= refresh_token;
+
+        res.cookie("access_token", access_token, {
+            httpOnly: true,
+            secure: is_production,
+            sameSite: is_production ? "strict" : "lax",
+            maxAge: 5 * 60 * 60 * 1000   
+        });
+
         await usersModel.findByIdAndUpdate(
             user._id,
             { $set: { refresh_token } },
             { new: true }
         );
-                await  linkVisitorToUser(req , user._id)
 
-        res.status(200).json({
-            data : {
-                message: "User is login ",
-                _id : user._id,
-                fullname : user.fullname,
-                email : user.email
+        await linkVisitorToUser(req, user._id);
+
+        return res.status(200).json({
+            data: {
+                message: "Login successful",
+                _id: user._id,
+                fullname: user.fullname,
+                email: user.email,
+                role: user.role 
             }
-        })
-    }catch ( err ){
-        next( err );
+        });
+    } catch (err) {
+        next(err);
     }
-}
+};
 
 // verify user 
 
 export const verify_user_email = async ( req , res  , next)=>{
     try {
         const { user_id } = req.params;
-        console.log(user_id)
         const user = await usersModel.findByIdAndUpdate( user_id, {$set : { is_verify : true }} , { new : true }  )
         if ( !user ) throw new NotFoundError(" User not found ");
         res.status(200).json({
@@ -348,7 +476,7 @@ export const get_user_profile = async (req, res, next) => {
                         .findOne({ user_id })
                         .select("keporasi_name keporasi_reg_number")
                         .lean()
-                    : null  // individual — skip query entirely
+                    : null 
         ]);
 
         return res.status(200).json({
@@ -363,7 +491,7 @@ export const get_user_profile = async (req, res, next) => {
                 phone_number : user_detail?.phone_number ?? null,
                 IC           : user_detail?.IC ?? null,
                 ...(extra && user.role === "company"  && { company_details: extra }),
-                ...(extra && user.role === "keporasi" && { keporasi_details: extra }),
+                ...(extra && user.role === "koperasi" && { keporasi_details: extra }),
             }
         });
 
@@ -378,8 +506,6 @@ export const update_user = async (req, res, next) => {
     try {
         const { user_id }      = req.params;
         const { phone_number } = req.body;
-
-
         const [user, user_detail] = await Promise.all([
             usersModel
                 .findById(user_id)
@@ -391,7 +517,6 @@ export const update_user = async (req, res, next) => {
                 .select('_id phone_number')
                 .lean()
         ]);
-
         if (!user)        throw new NotFoundError("User not found");
         if (!user_detail) throw new NotFoundError("User detail not found");
         let user_detail_fields = {};
@@ -493,7 +618,6 @@ export const delete_user = async (req, res, next) => {
         return res.status(200).json({ data: { message: "User deactivated and profile picture removed" } });
 
     } catch (err) {
-         console.error("REAL ERROR:", err);
         next(err);
     }
 };

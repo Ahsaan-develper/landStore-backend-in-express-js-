@@ -1,11 +1,6 @@
 // utils/notificationTemplates.js
 
 export const NotificationTemplates = {
-
-    // ==========================
-    // LISTING
-    // ==========================
-
     listingSubmitted({ listingCode, state, district }) {
         return {
             title: "Listing Submitted",

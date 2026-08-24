@@ -46,7 +46,6 @@ const schedule = await scheduleModel.create({
     scheduled_date_time: new Date(),
     notes
 });
-
 // Notification
 const template = NotificationTemplates.scheduleCreated({
     visitDate: new Date(visit_date).toLocaleString("en-MY", {
@@ -55,16 +54,15 @@ const template = NotificationTemplates.scheduleCreated({
     }),
     address: visit_address
 });
-
-await createAndSendNotification({
-    user_id: enquiry.user_id, // Notify enquiry owner
+    const io = req.app.get("io");
+await createAndSendNotification(io,{
+    user_id: enquiry.user_id,
     enquiry_id: enquiry._id,
     schedule_id: schedule._id,
     notifiable_type: "Schedule",
     title: template.title,
     message: template.message
 });
-
 return res.status(201).json({
     message: "Visit scheduled successfully.",
     schedule: {
@@ -100,7 +98,6 @@ export const change_schedule_status = async (req, res, next) => {
 
         const oldStatus = schedule.status;
 
-        // Prevent unnecessary update
         if (oldStatus === status) {
             return res.status(200).json({
                 message: "Schedule already has this status.",
@@ -110,12 +107,9 @@ export const change_schedule_status = async (req, res, next) => {
                 }
             });
         }
-
-        // Update schedule status
         schedule.status = status;
         await schedule.save();
 
-        // Fetch enquiry owner
         const enquiry = await enquiryModel
             .findById(schedule.enquiry_id)
             .select("_id user_id");
@@ -125,12 +119,12 @@ export const change_schedule_status = async (req, res, next) => {
         }
 
         // Create notification
-        const template = NotificationTemplates.scheduleStatusChanged({
+        const template = NotificationTemplates.schedulestatus({
             oldStatus,
             newStatus: status
         });
-
-        await createAndSendNotification({
+        const io = req.app.get("io")
+        await createAndSendNotification(io,{
             user_id: enquiry.user_id,
             enquiry_id: enquiry._id,
             schedule_id: schedule._id,
@@ -245,11 +239,7 @@ export const get_all_schedules = async ( req , res , next )=>{
         const page = Math.max(Number(req.query.page) || 1, 1);
         const limit = Math.max(Number(req.query.limit) || 10, 1);
         const skip = (page - 1) * limit;
-
         const schedules = await scheduleModel.aggregate([
-
-            // Admin Details
-
             {
                 $project: {
                     _id: 0,

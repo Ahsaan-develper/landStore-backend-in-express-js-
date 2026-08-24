@@ -4,7 +4,7 @@ import koperasiModel from "../models/keporasiDetail.model.js";
 import userDetailModel from "../models/userDetail.model.js";
 import usersModel from "../models/users.model.js";
 import { delete_file, upload_file } from "../services/cloudinary.service.js";
-import { ConflictError, ForbiddenError, InternalServerError, NotFoundError, UnauthorizedError } from "../utils/error.utils.js"
+import { ConflictError, ForbiddenError, NotFoundError, UnauthorizedError } from "../utils/error.utils.js"
 import { add_to_blacklist } from "../utils/logout.utils.js";
 import { user_code_generator } from "../utils/unique_code_generator.utils.js";
 import bcrypt from "bcrypt";
@@ -91,7 +91,7 @@ export const user_register = async (req, res, next) => {
                     email,
                     password: hashed_password,
                     status: "active",
-                    email_verified: false,
+                    is_verify: false,
                     role: "individual",
                     user_code
                 }
@@ -131,7 +131,7 @@ export const user_register = async (req, res, next) => {
                 role: user[0].role,
                 phone_number,
                 IC,
-                email_verified: false
+                is_verify: false
             }
         });
     } catch (err) {
@@ -143,8 +143,11 @@ export const user_register = async (req, res, next) => {
         await session.endSession();
     }
 };
+
+
 export const keporasi_register = async (req, res, next) => {
     const session = await mongoose.startSession();
+
     try {
         const {
             fullname,
@@ -154,29 +157,43 @@ export const keporasi_register = async (req, res, next) => {
             koperasi_name,
             koperasi_reg_number
         } = req.body;
+
         const existing_user = await usersModel
             .findOne({ email })
             .select("_id fullname email status is_verify")
             .lean();
+
         if (existing_user) {
+
             if (existing_user.status === "suspended") {
-                throw new ForbiddenError("Your account has been suspended by admin");
+                throw new ForbiddenError(
+                    "Your account has been suspended by admin"
+                );
             }
-            if (existing_user.status === "active" && existing_user.is_verify === true) {
-                throw new ConflictError("User email already registered");
+
+            if (
+                existing_user.status === "active" &&
+                existing_user.is_verify === true
+            ) {
+                throw new ConflictError(
+                    "User email already registered"
+                );
             }
+
             if (existing_user.status === "inactive") {
                 await usersModel.findByIdAndUpdate(
                     existing_user._id,
                     { $set: { status: "active" } }
                 );
             }
+
             if (existing_user.is_verify === false) {
                 await request_email_verification({
                     userId: existing_user._id,
                     userEmail: existing_user.email,
                     userName: existing_user.fullname
                 });
+
                 return res.status(200).json({
                     data: {
                         message:
@@ -186,71 +203,79 @@ export const keporasi_register = async (req, res, next) => {
             }
 
             return res.status(200).json({
-                data: { message: "User account has been reactivated." }
+                data: {
+                    message: "User account has been reactivated."
+                }
             });
         }
 
-        const [user_code, hashed_password, user_id] = await Promise.all([
+        const [user_code, hashed_password] = await Promise.all([
             user_code_generator(),
-            bcrypt.hash(password, 10),
-            Promise.resolve(new mongoose.Types.ObjectId())
+            bcrypt.hash(password, 10)
         ]);
-        session.startTransaction();
-        const [user, keporasi] = await Promise.all([
-            usersModel.create(
-                [
-                    {
-                        _id: user_id,
-                        fullname,
-                        email,
-                        password: hashed_password,
-                        status: "active",
-                        is_verify: false,
-                        role: "koperasi",
-                        user_code
-                    }
-                ],
+        
+        const user_id = new mongoose.Types.ObjectId();
+
+        await session.withTransaction(async () => {
+
+            await usersModel.create(
+                [{
+                    _id: user_id,
+                    fullname,
+                    email,
+                    password: hashed_password,
+                    status: "active",
+                    is_verify: false,
+                    role: "koperasi",
+                    user_code
+                }],
                 { session }
-            ),
-            koperasiModel.create(
-                [{ user_id, koperasi_name, koperasi_reg_number }],
+            );
+
+            await koperasiModel.create(
+                [{
+                    user_id,
+                    koperasi_name,
+                    koperasi_reg_number
+                }],
                 { session }
-            ),
-            userDetailModel.create(
-                [{ user_id, phone_number }],
+            );
+            await userDetailModel.create(
+                [{
+                    user_id,
+                    phone_number,
+                }],
                 { session }
-            )
-        ]);
-        await session.commitTransaction();
-        await linkVisitorToUser(req, user[0]._id);
+            );
+        });
+
+        await linkVisitorToUser(req, user_id);
+
         await request_email_verification({
-            userId: user[0]._id,
-            userEmail: user[0].email,
-            userName: user[0].fullname
+            userId: user_id,
+            userEmail: email,
+            userName: fullname
         });
 
         return res.status(201).json({
             data: {
-                _id: user[0]._id,
-                fullname: user[0].fullname,
-                email: user[0].email,
-                role: user[0].role,
+                _id: user_id,
+                fullname,
+                email,
+                role: "koperasi",
                 phone_number,
-                keporasi_name: keporasi[0].keporasi_name,
-                keporasi_reg_number: keporasi[0].keporasi_reg_number,
-                is_verify: false    // was missing
+                koperasi_name,
+                koperasi_reg_number,
+                is_verify: false
             }
         });
+
     } catch (err) {
-        if (session.inTransaction()) {
-            await session.abortTransaction();
-        }
         next(err);
     } finally {
         await session.endSession();
     }
 };
-
 
 // company register 
 export const company_register = async (req, res, next) => {
@@ -395,15 +420,15 @@ export const user_login = async (req, res, next) => {
 
         res.cookie("refresh_token", refresh_token, {
             httpOnly: true,
-            secure: is_production,
-            sameSite: is_production ? "strict" : "lax",
+            // secure: is_production,
+            // sameSite: is_production ? "strict" : "lax",
             maxAge: 7 * 24 * 60 * 60 * 1000   
         });
 
         res.cookie("access_token", access_token, {
             httpOnly: true,
-            secure: is_production,
-            sameSite: is_production ? "strict" : "lax",
+            // secure: is_production,
+            // sameSite: is_production ? "strict" : "lax",
             maxAge: 5 * 60 * 60 * 1000   
         });
 
@@ -452,8 +477,8 @@ export const get_user_profile = async (req, res, next) => {
 
         const user = await usersModel
             .findById(user_id)
-            .select("_id fullname email role status is_verify media_id")
-            .populate({ path: "media_id", select: "media_url media_type media_name" })
+            .select("_id fullname email role status is_verify user_code media_id  ")
+            .populate({ path: "media_id", select: "media_url public_id" })
             .lean();
 
         if (!user)           throw new NotFoundError("User not found");
@@ -463,9 +488,8 @@ export const get_user_profile = async (req, res, next) => {
         const [user_detail, extra] = await Promise.all([
             userDetailModel
                 .findOne({ user_id })
-                .select("phone_number IC")
+                .select("phone_number IC ")
                 .lean(),
-
             user.role === "company"
                 ? companyDetailsModel
                     .findOne({ user_id })
@@ -478,7 +502,6 @@ export const get_user_profile = async (req, res, next) => {
                         .lean()
                     : null 
         ]);
-
         return res.status(200).json({
             data: {
                 _id          : user._id,
@@ -500,82 +523,85 @@ export const get_user_profile = async (req, res, next) => {
     }
 };
 
-// update an user 
-
+// update an user
 export const update_user = async (req, res, next) => {
     try {
-        const { user_id }      = req.params;
+        const { user_id } = req.params;
         const { phone_number } = req.body;
         const [user, user_detail] = await Promise.all([
             usersModel
                 .findById(user_id)
-                .select('_id media_id')
-                .populate({ path: 'media_id', select: 'public_id media_url media_type media_name' })
+                .select("_id media_id")
+                .populate({
+                    path: "media_id",
+                    select: "public_id media_url media_type media_name"
+                })
                 .lean(),
+
             userDetailModel
                 .findOne({ user_id })
-                .select('_id phone_number')
+                .select("_id phone_number")
                 .lean()
         ]);
-        if (!user)        throw new NotFoundError("User not found");
-        if (!user_detail) throw new NotFoundError("User detail not found");
-        let user_detail_fields = {};
-        let media_fields       = {};
 
-        if (phone_number) user_detail_fields.phone_number = phone_number;
+        if (!user) {
+            throw new NotFoundError("User not found");
+        }
+
+        if (!user_detail) {
+            throw new NotFoundError("User detail not found");
+        }
+            await userDetailModel.findOneAndUpdate(
+                { user_id },
+                { $set: { phone_number : phone_number } },
+                { returnDocument : "after" }
+            );
+        let updated_media = null;
 
         if (req.file) {
-            const existing_public_id = user.media_id?.public_id?.[0];
+            const result = await upload_file(
+                req.file.buffer,
+                "profile"
+            );
 
-            if (existing_public_id) await delete_file(existing_public_id);
-
-            const result = await upload_file(req.file.buffer, 'profile');
-
-            media_fields = {
-                media_url  : [result.url],
-                public_id  : [result.public_id],
-                media_type : ["image"],
-                media_name : ["profile_img"]
+            const media_data = {
+                media_url: [result.url],
+                public_id: [result.public_id],
+                media_type: ["image"],
+                media_name: ["profile_img"]
             };
+
+            if (user.media_id) {
+                updated_media = await mediaModel.findByIdAndUpdate(
+                    user.media_id._id,
+                    { $set: media_data },
+                    { new: true }
+                ).lean();
+
+                const old_public_id = user.media_id.public_id?.[0];
+
+                if (old_public_id) {
+                    await delete_file(old_public_id);
+                }
+
+            } else {
+                updated_media = await mediaModel.create(media_data);
+
+                await usersModel.findByIdAndUpdate(
+                    user_id,
+                    {
+                        $set: {
+                            media_id: updated_media._id
+                        }
+                    },
+                );
+            }
         }
-
-        if (!Object.keys(user_detail_fields).length && !Object.keys(media_fields).length) {
-            return res.status(200).json({ data: { message: "Nothing to update" } });
-        }
-
-
-        const [updated_detail, updated_media] = await Promise.all([
-
-            Object.keys(user_detail_fields).length
-                ? userDetailModel.findOneAndUpdate(
-                    { user_id },
-                    { $set: user_detail_fields },
-                    { new: true, select: 'phone_number' }
-                ).lean()
-                : null,
-            
-            Object.keys(media_fields).length
-                ? user.media_id
-                    
-                    ? mediaModel.findByIdAndUpdate(
-                        user.media_id._id,
-                        { $set: media_fields },
-                        { new: true, select: 'media_url media_type media_name' }
-                    ).lean()
-                    : mediaModel.create(media_fields).then(async (media) => {
-                        await usersModel.findByIdAndUpdate(
-                            user_id,
-                            { $set: { media_id: media._id } }
-                        );
-                        return media;
-                    })
-                : null
-        ]);
 
         return res.status(200).json({
+            status: "success",
             data: {
-                phone_number : updated_detail?.phone_number ?? user_detail.phone_number,
-                media        : updated_media
+                message: "User updated successfully"
             }
         });
 
@@ -583,7 +609,6 @@ export const update_user = async (req, res, next) => {
         next(err);
     }
 };
-
 
 // delete an user
 

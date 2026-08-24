@@ -116,8 +116,6 @@ export const get_folder_listings = async (req, res, next) => {
         const skip = (page - 1) * limit;
 
         const folder_oid = new mongoose.Types.ObjectId(folder_id);
-
-        // .lean() skips Mongoose doc hydration — faster for existence + name check
         const folder = await folderModel
             .findById(folder_oid, { folder_name: 1 })
             .lean();
@@ -128,21 +126,15 @@ export const get_folder_listings = async (req, res, next) => {
 
         const [result] = await folderListingModel.aggregate([
 
-            // Match folder first
             {
                 $match: { folder_id: folder_oid }
             },
-
             {
                 $facet: {
-
                     listings: [
-
                         { $sort: { createdAt: -1 } },
                         { $skip: skip },
                         { $limit: limit },
-
-                        // Listing — fetch only required fields
                         {
                             $lookup: {
                                 from: "listings",
@@ -166,8 +158,6 @@ export const get_folder_listings = async (req, res, next) => {
                             }
                         },
                         { $unwind: "$listing" },
-
-                        // Media — project only first image URL before joining
                         {
                             $lookup: {
                                 from: "media",
@@ -183,8 +173,6 @@ export const get_folder_listings = async (req, res, next) => {
                                 as: "media"
                             }
                         },
-
-                        // State — only state name
                         {
                             $lookup: {
                                 from: "states",
@@ -196,9 +184,6 @@ export const get_folder_listings = async (req, res, next) => {
                                 as: "state"
                             }
                         },
-
-                        // District — $limit: 1 prevents row multiplication
-                        // when multiple districts share the same state_id
                         {
                             $lookup: {
                                 from: "districts",
@@ -211,8 +196,6 @@ export const get_folder_listings = async (req, res, next) => {
                                 as: "district"
                             }
                         },
-
-                        // Deal Type — only name field
                         {
                             $lookup: {
                                 from: "dealtypes",
@@ -224,7 +207,6 @@ export const get_folder_listings = async (req, res, next) => {
                                 as: "deal_type"
                             }
                         },
-
                         {
                             $project: {
                                 _id: 0,
@@ -255,17 +237,13 @@ export const get_folder_listings = async (req, res, next) => {
                             }
                         }
                     ],
-
                     totalCount: [
                         { $count: "count" }
                     ]
                 }
             }
-
         ], { allowDiskUse: true });
-
         const totalListings = result.totalCount[0]?.count || 0;
-
         return res.status(200).json({
             message: "Folder listings fetched successfully.",
             folder_name: folder.folder_name,
@@ -274,7 +252,6 @@ export const get_folder_listings = async (req, res, next) => {
             totalListings,
             listings: result.listings,
         });
-
     } catch (err) {
         next(err);
     }

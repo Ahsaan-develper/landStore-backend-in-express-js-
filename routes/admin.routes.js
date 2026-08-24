@@ -31,7 +31,7 @@ admin_router.post("/sub_admin" , verify_token , authorize("super_admin") ,  user
 
 
 // change user status 
-admin_router.patch("/change_status" , verify_token , authorize("super_admin", "user_admin")  , admin_status_validator , HandleValidationError, change_user_status_by_admin);
+admin_router.patch("/change_status/:user_id" , verify_token , authorize("super_admin", "user_admin")  , admin_status_validator , HandleValidationError, change_user_status_by_admin);
 
 // get all admin
 

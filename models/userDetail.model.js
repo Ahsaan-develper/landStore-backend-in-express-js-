@@ -1,9 +1,8 @@
 import mongoose from "mongoose";
 
 const userDetailSchema = new mongoose.Schema({
-  user_id: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  user_id: { type: mongoose.Schema.Types.ObjectId, ref: "User"  , unique: true },
   phone_number: { type: String, unique: true, required: true },
-  IC: { type: String, unique: true , sparse: true },
+  IC: { type: String, unique: true  , sparse :  true  },
 }, { timestamps: true });
-userDetailSchema.index({ user_id: 1 });
 export default mongoose.model("UserDetail", userDetailSchema);

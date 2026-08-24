@@ -1,9 +1,9 @@
+import { io } from "socket.io-client";
 import dealTypeModel from "../models/dealType.model.js";
 import enquiryModel from "../models/enquiry.model.js";
 import listingModel from "../models/listing.model.js";
 import mediaModel from "../models/media.model.js";
 import messageModel from "../models/message.model.js";
-import stateModel from "../models/state.model.js";
 import { createAndSendNotification } from "../services/notification.service.js";
 import { NotificationTemplates } from "../template/notification.template.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../utils/error.utils.js";
@@ -21,22 +21,17 @@ export const create_enquiry = async (req, res, next) => {
             role,
             message
         } = req.body;
-
         const user_id = req.user.sub;
-
-        // Check listing exists and is active
         const listing = await listingModel.findOne({
             _id: listing_id,
             status: "active"
         }).select("_id listing_code");
-
         if (!listing) {
             throw new NotFoundError(
                 "Listing not found or is no longer available or not active"
             );
         }
 
-        // Check existing enquiry
         const existingEnquiry = await enquiryModel.findOne({
             user_id,
             listing_id
@@ -67,8 +62,8 @@ export const create_enquiry = async (req, res, next) => {
         const template = NotificationTemplates.enquiryCreated({
             enquiryCode: enquiry.enquiry_code
         });
-
-        await createAndSendNotification({
+        const io = req.ap.get("io");
+        await createAndSendNotification(io, {
             user_id,
             enquiry_id: enquiry._id,
             notifiable_type: "Enquiry",
@@ -86,7 +81,7 @@ export const create_enquiry = async (req, res, next) => {
     }
 };
 
-// get all user enquiry 
+// get all user enquiry
 export const get_all_enquiry = async (req, res, next) => {
     try {
 
@@ -101,29 +96,24 @@ export const get_all_enquiry = async (req, res, next) => {
 
             {
                 $match: {
-                    user_id: new mongoose.Types.ObjectId(user_id)
+                    user_id: new mongoose.Types.ObjectId(user_id),
+                    status : { $ne : "cancel"}
                 }
             },
-
             {
                 $facet: {
-
                     enquiries: [
-
                         {
                             $sort: {
                                 updatedAt: -1
                             }
                         },
-
                         {
                             $skip: skip
                         },
-
                         {
                             $limit: limit
                         },
-
                         // Listing
                         {
                             $lookup: {
@@ -136,7 +126,6 @@ export const get_all_enquiry = async (req, res, next) => {
                         {
                             $unwind: "$listing"
                         },
-
                         // State
                         {
                             $lookup: {
@@ -188,27 +177,19 @@ export const get_all_enquiry = async (req, res, next) => {
                                 as: "media"
                             }
                         },
-
                         {
                             $project: {
-                                _id: 0,
-
                                 enquiry_id: "$_id",
                                 enquiry_code: 1,
                                 status: 1,
                                 updatedAt: 1,
-
                                 listing_id: "$listing._id",
-
                                 unit: "$listing.unit",
                                 area: "$listing.area",
                                 utilization: "$listing.utilization",
-
                                 state: "$state.state",
                                 district: "$district.district",
-
                                 deal_type: "$deal_type.name",
-
                                 image: {
                                     $arrayElemAt: [
                                         {
@@ -222,24 +203,18 @@ export const get_all_enquiry = async (req, res, next) => {
                                 }
                             }
                         }
-
                     ],
-
                     totalCount: [
                         {
                             $count: "count"
                         }
                     ]
-
                 }
             }
-
         ]);
-
         const enquiries = result[0].enquiries;
         const totalEnquiries = result[0].totalCount[0]?.count || 0;
         const totalPages = Math.ceil(totalEnquiries / limit);
-
         return res.status(200).json({
             page,
             limit,
@@ -247,12 +222,10 @@ export const get_all_enquiry = async (req, res, next) => {
             totalEnquiries,
             enquiries
         });
-
     } catch (err) {
         next(err);
     }
 };
-
 // all enquiry by admin 
 
 
@@ -373,46 +346,34 @@ export const change_enquiry_status = async (req, res, next) => {
     try {
         const {  status } = req.body;
         const { enquiry_id } = req.params;
-        // if (!mongoose.Types.ObjectId.isValid(enquiry_id)) {
-        //     throw new BadRequestError("Invalid enquiry id.");
-        // }
-
         const enquiry = await enquiryModel.findById(enquiry_id).select(
             "_id enquiry_code user_id status"
         );
-
         if (!enquiry) {
             throw new NotFoundError("Enquiry not found.");
         }
-
         if (enquiry.status === status) {
             throw new BadRequestError(
                 `Enquiry is already ${status}.`
             );
         }
-
         const oldStatus = enquiry.status;
-
         enquiry.status = status;
-
         await enquiry.save();
-
         // Notification
         const template = NotificationTemplates.enquiryStatusChanged({
             enquiryCode: enquiry.enquiry_code,
             oldStatus,
             newStatus: status
         });
-      
-        
-        await createAndSendNotification({
+        const io = req.app.get("io");
+        await createAndSendNotification(io,{
             user_id : enquiry.user_id,
             enquiry_id: enquiry._id,
             notifiable_type: "Enquiry",
             title: template.title,
             message: template.message
         });
-
         return res.status(200).json({
             message: "Enquiry status updated successfully.",
             data: {
@@ -422,12 +383,10 @@ export const change_enquiry_status = async (req, res, next) => {
                 updatedAt: enquiry.updatedAt
             }
         });
-
     } catch (err) {
         next(err);
     }
 };
-
 
 export const get_single_enquiry = async (req, res, next) => {
     try {

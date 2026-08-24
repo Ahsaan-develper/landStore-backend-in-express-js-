@@ -9,7 +9,7 @@ export const sub_admin_validator = [
 
 
 export const admin_status_validator = [
-    body("user_id")
+    param("user_id")
     .trim()
     .notEmpty().withMessage(" Please enter user_id  ").bail()
     .isMongoId().withMessage("Id format not correct "),
@@ -19,7 +19,6 @@ export const admin_status_validator = [
     .notEmpty().withMessage("Please enter status").bail()
     .isIn(["active" , "inactive" , "suspended"]).withMessage("Status must be active , inactive , suspended")
 ]
-
 
 export const admin_change_role_validator = [
     param("admin_id")

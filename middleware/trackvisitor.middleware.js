@@ -45,10 +45,6 @@ export async function trackVisitor(req, res, next) {
 
         const visitor_token = req.cookies?.visitor_token;
 
-        // --------------------------
-        // 1. Cookie
-        // --------------------------
-
         if (visitor_token) {
 
             visitor = await visitorModel.findOne({
@@ -57,10 +53,6 @@ export async function trackVisitor(req, res, next) {
 
         }
 
-        // --------------------------
-        // 2. Browser signature
-        // --------------------------
-
         if (!visitor) {
 
             visitor = await visitorModel.findOne({
@@ -68,11 +60,6 @@ export async function trackVisitor(req, res, next) {
             });
 
         }
-
-        // --------------------------
-        // 3. IP + User-Agent
-        // --------------------------
-
         if (!visitor) {
 
             visitor = await visitorModel.findOne({
@@ -81,11 +68,6 @@ export async function trackVisitor(req, res, next) {
             });
 
         }
-
-        // --------------------------
-        // Create visitor
-        // --------------------------
-
         if (!visitor) {
 
             const token = crypto.randomUUID();

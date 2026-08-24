@@ -101,10 +101,6 @@ export const NotificationTemplates = {
 
 
 
-    // ==========================
-    // ENQUIRY
-    // ==========================
-
     enquiryCreated({ enquiryCode }) {
         return {
             title: "Enquiry Submitted",
@@ -138,11 +134,6 @@ export const NotificationTemplates = {
     },
 
 
-
-    // ==========================
-    // MESSAGE
-    // ==========================
-
     newMessage() {
         return {
             title: "New Message",
@@ -150,11 +141,6 @@ export const NotificationTemplates = {
         };
     },
 
-
-
-    // ==========================
-    // SCHEDULE
-    // ==========================
 
     scheduleCreated({
         visitDate,
@@ -179,11 +165,6 @@ export const NotificationTemplates = {
 
 
 
-
-    // ==========================
-    // ACCOUNT
-    // ==========================
-
     accountVerified() {
         return {
             title: "Account Verified",
@@ -194,7 +175,14 @@ export const NotificationTemplates = {
     accountSuspended() {
         return {
             title: "Account Suspended",
-            message: "Your account has been suspended. Please contact support for more information."
+            message: "Your account has been suspended."
+        };
+    },
+
+    accountActivated() {
+        return {
+            title: "Account Activated",
+            message: "Your account has been Activated."
         };
     }
 

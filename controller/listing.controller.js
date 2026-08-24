@@ -29,6 +29,8 @@ export const create_listing = async (req, res, next) => {
         } = req.body;
 
         const user_id         = req.user.sub;
+        console.log("user od " , user_id);
+        
         const property_images = req.files?.property_images || [];
         const geran_docs      = req.files?.geran_doc       || [];
 
@@ -140,7 +142,8 @@ export const create_listing = async (req, res, next) => {
             district : district_doc.district,
             status : "pending"
         })
-        await createAndSendNotification({
+        const io = req.app.get("io");
+        await createAndSendNotification(io,{
 
     user_id: listing.user_id,
 
@@ -374,24 +377,20 @@ export const make_draft_by_user = async (req, res, next) => {
         );
 
         await dbSession.commitTransaction();
-        // ── Transaction closed ─────────────────────────────────────────────
-
-        // Notification after commit — failure here won't roll back the listing
         const { title, message } = NotificationTemplates.listingDraftSaved({
             listingCode: listing[0].listing_code,
             state: state_doc[0].state,
             district: district_doc[0].district,
             status: "pending",
         });
-
-        await createAndSendNotification({
+        const io = req.app.get("io");
+        await createAndSendNotification(io, {
             user_id: listing[0].user_id,
             listing_id: listing[0]._id,
             notifiable_type: "Listing",
             title,
             message,
         });
-
         return res.status(201).json({
             success: true,
             message: "Draft saved successfully.",
@@ -420,30 +419,24 @@ export const get_listing_by_user = async (req, res, next) => {
         const page = Math.max(Number(req.query.page) || 1, 1);
         const limit = Math.max(Number(req.query.limit) || 10, 1);
         const skip = (page - 1) * limit;
-
         const userId = new mongoose.Types.ObjectId(req.user.sub);
-
         const [result] = await listingModel.aggregate([
             {
                 $match: {
-                    user_id: userId
+                    user_id: userId ,
+                    status : { $ne : "deactive" }
                 }
             },
-
             {
                 $sort: {
                     createdAt: -1
                 }
             },
-
             {
                 $facet: {
-
                     listings: [
-
                         { $skip: skip },
                         { $limit: limit },
-
                         // State
                         {
                             $lookup: {
@@ -673,7 +666,6 @@ export const update_listing = async (req, res, next) => {
                 req.body.is_malay_reserve_land === "true" ||
                 req.body.is_malay_reserve_land === true;
 
-        // ── Location (independent — only runs if coordinates sent) ────────
         const { longitude, latitude } = req.body;
         if (longitude !== undefined && latitude !== undefined) {
             parallelTasks.location = locationModel.findByIdAndUpdate(
@@ -708,7 +700,6 @@ export const update_listing = async (req, res, next) => {
             );
         }
 
-        // ── Terrain ───────────────────────────────────────────────────────
         if (req.body.terrain !== undefined) {
             const terrain_list = Array.isArray(req.body.terrain)
                 ? req.body.terrain : [req.body.terrain];
@@ -787,13 +778,13 @@ if (new_images.length || new_docs.length) {
         { image: [], document: [] }
     );
 
-    // 2. Delete old Cloudinary files for the types being replaced
+
     const to_delete_pids = [
         ...(new_images.length ? stored.image.map(f => f.public_id)    : []),
         ...(new_docs.length   ? stored.document.map(f => f.public_id) : []),
     ];
 
-    // 3. Upload new files + delete old ones in parallel
+
     const [image_uploads, doc_uploads] = await Promise.all([
         new_images.length
             ? upload_files_to_cloudinary(new_images, "listings/images")            : [],
@@ -821,7 +812,7 @@ if (new_images.length || new_docs.length) {
 
     const merged = [...final.images, ...final.docs];
 
-    // 5. Overwrite media document with merged result
+ 
     parallelTasks.media = mediaModel.findByIdAndUpdate(
         existing.media_id?.[0],
         {
@@ -851,20 +842,14 @@ if (new_images.length || new_docs.length) {
             listingCode : updated.listing_code,
             status : "pending"
         })
-        await createAndSendNotification({
-
+        const io = req.app.get("io");
+        await createAndSendNotification(io,{
     user_id : updated.user_id,
-
     listing_id: updated._id,
-
     notifiable_type: "Listing",
-
     title,
-
     message
-
 });
-
         return res.status(200).json({
             data: {
                 _id          : updated._id,
@@ -872,7 +857,6 @@ if (new_images.length || new_docs.length) {
                 status       : updated.status,
             },
         });
-
     } catch (err) {
         console.error(err);
         next(err);
@@ -880,10 +864,10 @@ if (new_images.length || new_docs.length) {
 };
 
 
-// // ── constants
+
 const SQM_TO_SQFT = 10.7639;
 
-// ── price calculator 
+
 const calculate_total_price = (price_sqft, area, unit) => {
     const area_in_sqft = unit === "sqm" ? area * SQM_TO_SQFT : area;
     return parseFloat((price_sqft * area_in_sqft).toFixed(2));
@@ -918,7 +902,7 @@ const format_listing = (listing) => {
     };
 };
 
-// // ── shared DB helper 
+
 const get_listings_by_status = async (user_id, status, page, limit) => {
     const skip = (page - 1) * limit;
 
@@ -1015,8 +999,6 @@ export const search_listings = async (req, res, next) => {
         } = req.query;
 
         const filter = { status: "active" };
-
-     
         let state_ids = null;
 
         if (state) {
@@ -1274,7 +1256,6 @@ export const change_listing_status = async (req, res, next) => {
         const { listing_id } = req.params;
         const oldStatuss = await listingModel.findById(listing_id, "status").lean();
         const oldStatus = oldStatuss.status;
-
         const listing = await listingModel.findByIdAndUpdate(
             listing_id,
             {
@@ -1283,19 +1264,15 @@ export const change_listing_status = async (req, res, next) => {
                 }
             },
             {
-                new: true,
-                runValidators: true
+                returnDocument : "after"
             }
         );
-
         const [state, district] = await Promise.all([
             stateModel.findById(listing.state_id, "state").lean(),
             districtModel.findOne({ state_id: listing.state_id }, "district").lean()
         ]);
         const stateName= state.state;
         const districtName= district.district;
-      
-        
         const { title , message} =NotificationTemplates.listingStatusChanged({
             listingCode : listing.listing_code,
             state : stateName,
@@ -1303,20 +1280,14 @@ export const change_listing_status = async (req, res, next) => {
             oldStatus : oldStatus,
             newStatus : status
         });
-        await createAndSendNotification({
-
+        const io = req.app.get("io");
+        await createAndSendNotification(io,{
     user_id: listing.user_id,
-
     listing_id: listing._id,
-
     notifiable_type: "Listing",
-
     title,
-
     message
-
 });
-
         return res.status(200).json({
             message: "Listing status updated successfully.",
             listing: {
@@ -1325,7 +1296,6 @@ export const change_listing_status = async (req, res, next) => {
                 status: listing.status
             }
         });
-
     } catch (err) {
         next(err);
     }
@@ -1335,14 +1305,12 @@ export const change_listing_status = async (req, res, next) => {
 export const get_single_listing = async (req, res, next) => {
     try {
         const { id } = req.params;
-
         const listing = await listingModel.aggregate([
             {
                 $match: {
                     _id: new mongoose.Types.ObjectId(id)
                 }
             },
-
             {
                 $lookup: {
                     from: "users",
@@ -1354,7 +1322,6 @@ export const get_single_listing = async (req, res, next) => {
             {
                 $unwind: "$user"
             },
-
             {
                 $lookup: {
                     from: "states",
@@ -1366,7 +1333,6 @@ export const get_single_listing = async (req, res, next) => {
             {
                 $unwind: "$state"
             },
-
             {
                 $lookup: {
                     from: "districts",
@@ -1381,7 +1347,6 @@ export const get_single_listing = async (req, res, next) => {
                     preserveNullAndEmptyArrays: true
                 }
             },
-
             {
                 $lookup: {
                     from: "subdistricts",
@@ -1396,7 +1361,6 @@ export const get_single_listing = async (req, res, next) => {
                     preserveNullAndEmptyArrays: true
                 }
             },
-
             {
                 $lookup: {
                     from: "locations",
@@ -1408,7 +1372,6 @@ export const get_single_listing = async (req, res, next) => {
             {
                 $unwind: "$location"
             },
-
             {
                 $lookup: {
                     from: "media",
@@ -1417,7 +1380,6 @@ export const get_single_listing = async (req, res, next) => {
                     as: "media"
                 }
             },
-
             {
                 $lookup: {
                     from: "dealtypes",
@@ -1426,7 +1388,6 @@ export const get_single_listing = async (req, res, next) => {
                     as: "deal_types"
                 }
             },
-
             {
                 $lookup: {
                     from: "featuretags",
@@ -1435,7 +1396,6 @@ export const get_single_listing = async (req, res, next) => {
                     as: "feature_tags"
                 }
             },
-
             {
                 $lookup: {
                     from: "terraintypes",
@@ -1444,7 +1404,6 @@ export const get_single_listing = async (req, res, next) => {
                     as: "terrain"
                 }
             },
-
             {
                 $lookup: {
                     from: "tenuretypes",
@@ -1456,7 +1415,6 @@ export const get_single_listing = async (req, res, next) => {
             {
                 $unwind: "$tenure"
             },
-
             {
                 $lookup: {
                     from: "leaseholds",
@@ -1471,7 +1429,6 @@ export const get_single_listing = async (req, res, next) => {
                     preserveNullAndEmptyArrays: true
                 }
             },
-
             {
                 $addFields: {
                     total_price: {
@@ -1497,7 +1454,6 @@ export const get_single_listing = async (req, res, next) => {
         }
     }
 },
-
             {
                 $project: {
                     _id: 0,
@@ -1506,23 +1462,17 @@ export const get_single_listing = async (req, res, next) => {
                     listing_id: "$_id",
                     listing_code: 1,
                     status: 1,
-
                     unit: 1,
                     area: 1,
                     price_sqft: 1,
                     total_price: 1,
-
                     category: 1,
                     relation: 1,
                     utilization: 1,
-
                     public_description: 1,
-
                     is_malay_reserve_land: 1,
-
                     createdAt: 1,
                     updatedAt: 1,
-
                     owner: {
                         user_id: "$user._id",
                         fullname: "$user.fullname",
@@ -1530,33 +1480,22 @@ export const get_single_listing = async (req, res, next) => {
                         phone_number: "$user.phone_number",
                         role: "$user.role"
                     },
-
                     state: "$state.state",
-
                     district: "$district.district",
-
                     sub_district: "$sub_district.sub_district",
-
                     location: {
                         longitude: "$location.longitude",
                         latitude: "$location.latitude",
                         radius: "$location.radius"
                     },
-
                     media: {
                         media_url: "$media.media_url",
-                        media_type: "$media.media_type",
-                        media_name: "$media.media_name"
+                        public_id : "$media.public_id"
                     },
-
                     deal_types: "$deal_types.name",
-
                     feature_tags: "$feature_tags.tag",
-
                     terrain: "$terrain.name",
-
                     tenure: "$tenure.type",
-
                     leasehold: {
                         start_date: "$leasehold.start_date",
                         end_year: "$leasehold.end_year"
@@ -1564,16 +1503,13 @@ export const get_single_listing = async (req, res, next) => {
                 }
             }
         ]);
-
         if (!listing.length) {
             throw new NotFoundError("Listing not found.");
         }
-
         return res.status(200).json({
             message: "Listing fetched successfully.",
             listing: listing[0]
         });
-
     } catch (err) {
         next(err);
     }
@@ -1583,24 +1519,17 @@ export const get_single_listing = async (req, res, next) => {
 export const get_listing_by_radius = async (req, res, next) => {
     try {
         const { latitude, longitude, radius = 100 } = req.query;
-
         const centerLat = Number(latitude);
         const centerLon = Number(longitude);
         const maxRadius = Number(radius);
-
-        
         const latDelta = maxRadius / 111;
         const lonDelta = maxRadius / (111 * Math.cos(centerLat * Math.PI / 180));
-
         const minLat = centerLat - latDelta;
         const maxLat = centerLat + latDelta;
         const minLon = centerLon - lonDelta;
         const maxLon = centerLon + lonDelta;
-
-        // Step 2: Fetch all active listings with related data
         const listings = await listingModel.aggregate([
             { $match: { status: "active" } },
-
             {
                 $lookup: {
                     from: "locations",
@@ -1610,7 +1539,6 @@ export const get_listing_by_radius = async (req, res, next) => {
                 }
             },
             { $unwind: "$location" },
-
             {
                 $lookup: {
                     from: "media",
@@ -1620,7 +1548,6 @@ export const get_listing_by_radius = async (req, res, next) => {
                     as: "media"
                 }
             },
-
             {
                 $lookup: {
                     from: "states",
@@ -1681,13 +1608,10 @@ export const get_listing_by_radius = async (req, res, next) => {
                 }
             }
         ]);
-
-        // Step 3: Filter using bounding box — simple comparisons only
         const filtered = listings
             .filter((listing) => {
                 const lat = Number(listing.lat);
                 const lon = Number(listing.lon);
-
                 return (
                     lat >= minLat &&
                     lat <= maxLat &&
@@ -1724,116 +1648,34 @@ export const get_listing_by_radius = async (req, res, next) => {
         next(err);
     }
 };
+
 export const deactivate_listing = async (req, res, next) => {
-    const session = await mongoose.startSession();
-
     try {
-
-        session.startTransaction();
-
         const { id } = req.params;
-        if ( !id ) throw new BadRequestError(" Please enter listing_id ")
         const user_id = req.user.sub;
+        const deleted_listing = await listingModel.findByIdAndUpdate( id , { $set : { status : "deactive"} },  { returnDocument : "after"} )
+        if ( !deleted_listing) throw new NotFoundError(" Listing is not found ")
+        const { title, message } = NotificationTemplates.listingDelete({
+            listingCode: deleted_listing.listing_code,
+            status: "deactive"
+        });
+        const io = req.app.get("io");
+        await createAndSendNotification(io, {
+            user_id: deleted_listing.user_id,
+            listing_id: deleted_listing._id,
+            notifiable_type: "Listing",
+            title,
+            message
+        });
 
-        const listing = await listingModel
-            .findById(id)
-            .session(session);
-
-        if (!listing) {
-            throw new NotFoundError("Listing not found.");
-        }
-
-
-        // Already inactive
-        if (listing.status === "inactive") {
-            await session.abortTransaction();
-
-            return res.status(200).json({
-                message: "Listing is already inactive."
-            });
-        }
-
-
-        if (listing.media_id?.length) {
-
-            const medias = await mediaModel.find({
-                _id: { $in: listing.media_id }
-            }).session(session);
-
-            for (const media of medias) {
-
-                if (!media.public_id?.length) continue;
-
-                for (let i = 0; i < media.public_id.length; i++) {
-
-                    const publicId = media.public_id[i];
-                    const mediaType = media.media_type?.[i];
-
-                    try {
-
-                            await delete_files_from_cloudinary(publicId, {
-                                resource_type: "image"
-                            });
-
-    
-
-                    } catch (err) {
-                        console.error(
-                            `Cloudinary delete failed: ${publicId}`,
-                            err.message
-                        );
-                    }
-                }
-            }
-
-            // Delete media documents
-            await mediaModel.deleteMany({
-                _id: { $in: listing.media_id }
-            }).session(session);
-
-            listing.media_id = [];
-        }
-
-
-        listing.status = "inactive";
-
-        await listing.save({ session });
-
-        await session.commitTransaction();
-
-         const { title , message} =NotificationTemplates.listingDelete({
-            listingCode : listing.listing_code,
-            status : "inactive"
-        })
-        await createAndSendNotification({
-
-    user_id: listing.user_id,
-
-    listing_id: listing._id,
-
-    notifiable_type: "Listing",
-
-    title,
-
-    message
-
-});
         return res.status(200).json({
             message: "Listing deactivated successfully."
         });
 
     } catch (err) {
-
-        await session.abortTransaction();
         next(err);
-
-    } finally {
-
-        session.endSession();
-
     }
 };
-
 
 // get all views and counts
 export const get_all_views_count = async (req, res, next) => {

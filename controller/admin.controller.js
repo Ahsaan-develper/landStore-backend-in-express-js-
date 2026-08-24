@@ -92,12 +92,11 @@ export const admin_login = async (req, res, next) => {
 
         if (!user)           throw new UnauthorizedError("Email is incorrect");
         if (!user.is_verify) throw new UnauthorizedError("Please verify your email");
-
         const [is_match, admin] = await Promise.all([
             bcrypt.compare(password, user.password),
             adminModel.findOne({ user_id: user._id }).select("admin_role").lean()
         ]);
-
+        
         if (!is_match) throw new UnauthorizedError("Password is incorrect");
         if (!admin)    throw new UnauthorizedError("Admin record not found");
 
@@ -355,27 +354,23 @@ export const get_all_users = async (req, res, next) => {
 export const change_user_status_by_admin = async (req, res, next) => {
     try {
 
-        const { user_id, status } = req.body;
-
+        const {  status } = req.body;
+        const { user_id } = req.params ;
         const currentAdmin = req.user.role;
-
         const admin = await adminModel
             .findOne({ user_id })
             .select("_id role")
             .lean();
-
         if (admin && currentAdmin !== "super_admin") {
             throw new ForbiddenError(
                 "Only super admin can change another admin's status."
             );
         }
-
         const user = await usersModel.findByIdAndUpdate(
-            user_id,
+            new mongoose.Types.ObjectId(user_id),
             { $set: { status } },
-            { new: true }
+            { returnDocument : "after"}
         ).select("_id fullname email status");
-
         if (!user) {
             throw new NotFoundError("User not found.");
         }
@@ -385,16 +380,17 @@ export const change_user_status_by_admin = async (req, res, next) => {
         } else if (status === "active") {
             template = NotificationTemplates.accountActivated();
         }
+    if (template) {
 
-        if (template) {
-            await createAndSendNotification({
-                user_id: user._id,
-                notifiable_type: "Account",
-                title: template.title,
-                message: template.message
-            });
-        }
+    const io = req.app.get("io");
 
+    await createAndSendNotification(io, {
+        user_id: user._id,
+        notifiable_type: "Account",
+        title: template.title,
+        message: template.message
+    });
+}
         return res.status(200).json({
             message: "User status changed successfully.",
             user: {
@@ -403,7 +399,6 @@ export const change_user_status_by_admin = async (req, res, next) => {
                 status: user.status
             }
         });
-
     } catch (err) {
         next(err);
     }

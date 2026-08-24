@@ -18,6 +18,7 @@ import { section_router } from "./routes/section.routes.js";
 import { message_socket } from "./controller/message.controller.js";
 import { verify_socket_token } from "./middleware/jwt.middleware.js";
 import { dashboard_router } from "./routes/dashboard.route.js";
+import { notification_socket } from "./services/notification.service.js";
 
 const app = express();
 
@@ -48,34 +49,24 @@ const io = new Server(httpserver, {
         // credentials: true
     }
 });
-
+app.set("io", io);
 io.use(verify_socket_token);
-
-
 io.on("connection", (socket) => {
-console.log(socket.id);
 
-
-
+    console.log(socket.id);
     message_socket(
         io,
         socket
     );
+    notification_socket(io, socket);
 
-    notification_socket(
-        io,
-        socket
-    );
 
-    
     socket.on("disconnect", () => {
         console.log(
             "Socket disconnected:",
             socket.id
         );
     });
-
-    
 });
 
 

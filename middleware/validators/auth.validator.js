@@ -7,7 +7,7 @@ export const user_register_validator = [
     .notEmpty().withMessage(" Please fill your name ").bail()
     .isLength({ min : 4  , max: 40}).withMessage("Fullname characters length must be between 4 - 40 "),
 
-   body("email")
+    body("email")
     .trim()
     .notEmpty()
     .withMessage("Please enter your email")
@@ -65,24 +65,40 @@ export const Koperasi_register_validator = [
     body("koperasi_name")
     .trim()
     .notEmpty().withMessage("Please enter keporasi name ").bail()
-    .isLength({min : 5 , max : 30}).withMessage("Koperasi name characters must between 5 - 30"),
+    .isLength({min : 5 , max : 30}).withMessage("koperasi name characters must between 5 - 30"),
 
     body("koperasi_reg_number")
     .trim()
-    .notEmpty().withMessage("Please enter keporasi register Number")
+    .notEmpty().withMessage("Please enter koperasi register Number")
 ]
 
 export const user_login_validator = [
     body("email")
     .trim()
-    .notEmpty().withMessage("Please enter your email").bail()
-    .isEmail().withMessage("Email format not correct ").bail()
-    .isLength({min : 6 }).withMessage(" Email characters length must greater than 6 "),
+    .notEmpty()
+    .withMessage("Please enter your email")
+    .bail()
+    .isEmail()
+    .withMessage("Email format not correct")
+    .bail()
+    .isLength({ min: 6 })
+    .withMessage("Email must be at least 6 characters long")
+    .bail(),
+
 
     body("password")
     .trim()
-    .notEmpty().withMessage("Please enter you password").bail()
-    .isLength({ min : 5 , max : 20}).withMessage("Password Length must between 5 - 20")
+    .notEmpty()
+    .withMessage("Please enter your password")
+    .bail()
+    .isLength({ min: 8, max: 20 })
+    .withMessage("Password must be between 8 and 20 characters")
+    .bail()
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*(),.?":{}|<>])(?=.*\d).{8,20}$/)
+    .withMessage(
+        "Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character"
+    )
+    .bail()
 ]
 
 export const update_user_validator = [
@@ -92,10 +108,13 @@ export const update_user_validator = [
         .isMongoId().withMessage("Invalid user ID"),
 
     body("phone_number")
-    .optional()
-    .trim()
-    .notEmpty().withMessage("Please enter phone number").bail()
-    .isMobilePhone().withMessage("Phone format not correct "),
+        .optional()
+        .trim()
+        .notEmpty()
+        .withMessage("Please enter phone number")
+        .bail()
+        .isMobilePhone("en-MY")
+        .withMessage("Phone format not correct"),
 ]
 
 export const user_id_validator = [

@@ -9,7 +9,7 @@ const listingSchema = new mongoose.Schema({
   deal_type_id: [{ type: mongoose.Schema.Types.ObjectId, ref: "DealType" }],
   feature_tags_id: [{ type: mongoose.Schema.Types.ObjectId, ref: "FeatureTag" }],
   terrain_id: [{ type: mongoose.Schema.Types.ObjectId, ref: "TerrainType" }],
-  status: { type: String, enum: ["pending", "draft", "inactive", "active", "under_review"] },
+  status: { type: String, enum: ["pending", "draft", "inactive", "active", "under_review" , "deactive"] },
   public_description:{ type : String , required : true},
   is_malay_reserve_land: { type : Boolean , required : true},
   listing_code: { type: String, unique: true },

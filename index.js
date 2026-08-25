@@ -15,7 +15,7 @@ import { message_router } from "./routes/message.routes.js";
 import { schedule_router } from "./routes/schedule.routes.js";
 import { notification_router } from "./routes/notification.routes.js";
 import { section_router } from "./routes/section.routes.js";
-import { message_socket } from "./controller/message.controller.js";
+import { enquiry_message_socket, message_socket } from "./controller/message.controller.js";
 import { verify_socket_token } from "./middleware/jwt.middleware.js";
 import { dashboard_router } from "./routes/dashboard.route.js";
 import { notification_socket } from "./services/notification.service.js";
@@ -49,6 +49,8 @@ const io = new Server(httpserver, {
         // credentials: true
     }
 });
+
+
 app.set("io", io);
 io.use(verify_socket_token);
 io.on("connection", (socket) => {
@@ -60,7 +62,10 @@ io.on("connection", (socket) => {
     );
     notification_socket(io, socket);
 
-
+    enquiry_message_socket(
+        io,
+        socket
+    );
     socket.on("disconnect", () => {
         console.log(
             "Socket disconnected:",

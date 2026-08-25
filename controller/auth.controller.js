@@ -169,20 +169,16 @@ export const keporasi_register = async (req, res, next) => {
             koperasi_name,
             koperasi_reg_number
         } = req.body;
-
         const existing_user = await usersModel
             .findOne({ email })
             .select("_id fullname email status is_verify")
             .lean();
-
         if (existing_user) {
-
             if (existing_user.status === "suspended") {
                 throw new ForbiddenError(
                     "Your account has been suspended by admin"
                 );
             }
-
             if (
                 existing_user.status === "active" &&
                 existing_user.is_verify === true
@@ -191,21 +187,18 @@ export const keporasi_register = async (req, res, next) => {
                     "User email already registered"
                 );
             }
-
             if (existing_user.status === "inactive") {
                 await usersModel.findByIdAndUpdate(
                     existing_user._id,
                     { $set: { status: "active" } }
                 );
             }
-
             if (existing_user.is_verify === false) {
                 await request_email_verification({
                     userId: existing_user._id,
                     userEmail: existing_user.email,
                     userName: existing_user.fullname
                 });
-
                 return res.status(200).json({
                     data: {
                         message:
@@ -213,23 +206,19 @@ export const keporasi_register = async (req, res, next) => {
                     }
                 });
             }
-
             return res.status(200).json({
                 data: {
                     message: "User account has been reactivated."
                 }
             });
         }
-
         const [user_code, hashed_password] = await Promise.all([
             user_code_generator(),
             bcrypt.hash(password, 10)
         ]);
         
         const user_id = new mongoose.Types.ObjectId();
-
         await session.withTransaction(async () => {
-
             await usersModel.create(
                 [{
                     _id: user_id,
@@ -243,7 +232,6 @@ export const keporasi_register = async (req, res, next) => {
                 }],
                 { session }
             );
-
             await koperasiModel.create(
                 [{
                     user_id,
@@ -260,15 +248,12 @@ export const keporasi_register = async (req, res, next) => {
                 { session }
             );
         });
-
         await linkVisitorToUser(req, user_id);
-
         await request_email_verification({
             userId: user_id,
             userEmail: email,
             userName: fullname
         });
-
         return res.status(201).json({
             data: {
                 _id: user_id,

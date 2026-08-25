@@ -1655,14 +1655,12 @@ export const get_listing_by_radius = async (req, res, next) => {
                 deal_type: listing.deal_type,
                 feature_tags: listing.feature_tags,
             }));
-
         return res.status(200).json({
             center: { latitude: centerLat, longitude: centerLon },
             radius: `${maxRadius} KM`,
             total: filtered.length,
             listings: filtered,
         });
-
     } catch (err) {
         next(err);
     }
@@ -1686,11 +1684,9 @@ export const deactivate_listing = async (req, res, next) => {
             title,
             message
         });
-
         return res.status(200).json({
             message: "Listing deactivated successfully."
         });
-
     } catch (err) {
         next(err);
     }
@@ -1699,18 +1695,17 @@ export const deactivate_listing = async (req, res, next) => {
 // get all views and counts
 export const get_all_views_count = async (req, res, next) => {
     try {
-
         const user_id = new mongoose.Types.ObjectId(req.user.sub);
-
+        const now = new Date();
+        const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const startOfPreviousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
         const result = await listingModel.aggregate([
-
             {
                 $match: {
                     user_id,
                     status: "active"
                 }
             },
-
             {
                 $lookup: {
                     from: "listingactivities",
@@ -1719,7 +1714,6 @@ export const get_all_views_count = async (req, res, next) => {
                     as: "activities"
                 }
             },
-
             {
                 $project: {
                     total_views: {
@@ -1727,6 +1721,76 @@ export const get_all_views_count = async (req, res, next) => {
                     },
                     total_clicks: {
                         $sum: "$activities.click_count"
+                    },
+                    current_views: {
+                        $sum: {
+                            $map: {
+                                input: {
+                                    $filter: {
+                                        input: "$activities",
+                                        as: "a",
+                                        cond: { $gte: ["$$a.createdAt", startOfCurrentMonth] }
+                                    }
+                                },
+                                as: "a",
+                                in: "$$a.view_count"
+                            }
+                        }
+                    },
+                    current_clicks: {
+                        $sum: {
+                            $map: {
+                                input: {
+                                    $filter: {
+                                        input: "$activities",
+                                        as: "a",
+                                        cond: { $gte: ["$$a.createdAt", startOfCurrentMonth] }
+                                    }
+                                },
+                                as: "a",
+                                in: "$$a.click_count"
+                            }
+                        }
+                    },
+                    prev_views: {
+                        $sum: {
+                            $map: {
+                                input: {
+                                    $filter: {
+                                        input: "$activities",
+                                        as: "a",
+                                        cond: {
+                                            $and: [
+                                                { $gte: ["$$a.createdAt", startOfPreviousMonth] },
+                                                { $lt: ["$$a.createdAt", startOfCurrentMonth] }
+                                            ]
+                                        }
+                                    }
+                                },
+                                as: "a",
+                                in: "$$a.view_count"
+                            }
+                        }
+                    },
+                    prev_clicks: {
+                        $sum: {
+                            $map: {
+                                input: {
+                                    $filter: {
+                                        input: "$activities",
+                                        as: "a",
+                                        cond: {
+                                            $and: [
+                                                { $gte: ["$$a.createdAt", startOfPreviousMonth] },
+                                                { $lt: ["$$a.createdAt", startOfCurrentMonth] }
+                                            ]
+                                        }
+                                    }
+                                },
+                                as: "a",
+                                in: "$$a.click_count"
+                            }
+                        }
                     }
                 }
             },
@@ -1739,7 +1803,11 @@ export const get_all_views_count = async (req, res, next) => {
                     },
                     total_clicks: {
                         $sum: "$total_clicks"
-                    }
+                    },
+                    current_views: { $sum: "$current_views" },
+                    current_clicks: { $sum: "$current_clicks" },
+                    prev_views: { $sum: "$prev_views" },
+                    prev_clicks: { $sum: "$prev_clicks" }
                 }
             },
 
@@ -1747,19 +1815,62 @@ export const get_all_views_count = async (req, res, next) => {
                 $project: {
                     _id: 0,
                     total_views: 1,
-                    total_clicks: 1
+                    total_clicks: 1,
+                    views_growth: {
+                        $cond: {
+                            if: { $eq: ["$prev_views", 0] },
+                            then: null,
+                            else: {
+                                $round: [
+                                    {
+                                        $multiply: [
+                                            {
+                                                $divide: [
+                                                    { $subtract: ["$current_views", "$prev_views"] },
+                                                    "$prev_views"
+                                                ]
+                                            },
+                                            100
+                                        ]
+                                    },
+                                    1
+                                ]
+                            }
+                        }
+                    },
+                    clicks_growth: {
+                        $cond: {
+                            if: { $eq: ["$prev_clicks", 0] },
+                            then: null,
+                            else: {
+                                $round: [
+                                    {
+                                        $multiply: [
+                                            {
+                                                $divide: [
+                                                    { $subtract: ["$current_clicks", "$prev_clicks"] },
+                                                    "$prev_clicks"
+                                                ]
+                                            },
+                                            100
+                                        ]
+                                    },
+                                    1
+                                ]
+                            }
+                        }
+                    }
                 }
             }
-
         ]);
-
         return res.status(200).json(
             result[0] || {
                 total_views: 0,
-                total_clicks: 0
+                total_clicks: 0,
+                views_growth: null,
+                clicks_growth: null
             }
         );
-
     } catch (err) {
         next(err);
     }

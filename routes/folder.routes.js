@@ -8,12 +8,12 @@ export const folder_router = Router();
 
 
 // create an folder 
-folder_router.post("/" , verify_token , authorize("individual" , "company" , "keporasi") , create_folder_validator , HandleValidationError , create_folder);
+folder_router.post("/" , verify_token , authorize("individual" , "company" , "koperasi") , create_folder_validator , HandleValidationError , create_folder);
 
-folder_router.get("/" , verify_token , authorize("individual" , "company" , "keporasi") , folder_page_validator , HandleValidationError , get_all_folder);
+folder_router.get("/" , verify_token , authorize("individual" , "company" , "koperasi") , folder_page_validator , HandleValidationError , get_all_folder);
 
 // add listing into a folder 
-folder_router.post("/add_listing" , verify_token , authorize("individual" , "company" , "keporasi")  , add_listing_folder_validator , HandleValidationError, add_listing_to_folder);
+folder_router.post("/add_listing" , verify_token , authorize("individual" , "company" , "koperasi")  , add_listing_folder_validator , HandleValidationError, add_listing_to_folder);
 
 
-folder_router.get("/listings/:folder_id" , verify_token , authorize("individual" , "company" , "keporasi")  , folder_id_validator , HandleValidationError, get_folder_listings);
+folder_router.get("/listings/:folder_id" , verify_token , authorize("individual" , "company" , "koperasi")  , folder_id_validator , HandleValidationError, get_folder_listings);

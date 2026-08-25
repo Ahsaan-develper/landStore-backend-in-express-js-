@@ -15,6 +15,8 @@ import locationModel from "../models/location.model.js";
 import {delete_file, delete_files_from_cloudinary, upload_files_to_cloudinary} from "../services/cloudinary.service.js"
 import { NotificationTemplates } from "../template/notification.template.js";
 import { createAndSendNotification } from "../services/notification.service.js";
+import enquiryModel from "../models/enquiry.model.js";
+import notesModel from "../models/notes.model.js";
 
 
 export const create_listing = async (req, res, next) => {
@@ -89,32 +91,24 @@ export const create_listing = async (req, res, next) => {
                     ...geran_docs.map(f => f.originalname),
                 ],
             }),
-
             dealTypeModel.create({ name: deal_types }),
             featureTagModel.create({ tag: tags }),
             terrainTypeModel.create({ name: terrain_list }),
-
             locationModel.create({
                 location: {
                     type        : "Point",
                     coordinates : [parseFloat(longitude), parseFloat(latitude)],
                 }
             }),
-
             tenure_type === "leasehold"
                 ? leaseholdDetailModel.create({ start_date, end_year })
                 : null,
-
             listing_code_generator(),
         ]);
-
-       
         const tenure_doc = await tenureTypeModel.create({
             type         : tenure_type,
             leasehold_id : leasehold_doc?._id ?? null,
         });
-
-      
         const listing = await listingModel.create({
             user_id,
             state_id        : state_doc._id,
@@ -135,7 +129,6 @@ export const create_listing = async (req, res, next) => {
             relation       ,
             utilization     ,
         });
-
         const { title , message} =NotificationTemplates.listingSubmitted({
             listingCode : listing.listing_code,
             state : state_doc.state,
@@ -144,19 +137,12 @@ export const create_listing = async (req, res, next) => {
         })
         const io = req.app.get("io");
         await createAndSendNotification(io,{
-
     user_id: listing.user_id,
-
     listing_id: listing._id,
-
     notifiable_type: "Listing",
-
     title,
-
     message
-
 });
-
         return res.status(201).json({
             data: {
                 _id          : listing._id,
@@ -997,29 +983,60 @@ export const search_listings = async (req, res, next) => {
             terrain, deal_type, feature_tag, is_malay_reserve_land,
             unit, min_area, max_area,price_sqft
         } = req.query;
+        const hasSearchFilter = [
+            state,
+            district,
+            category,
+            utilization,
+            relation,
+            terrain,
+            deal_type,
+            feature_tag,
+            is_malay_reserve_land,
+            unit,
+            min_area,
+            max_area,
+            price_sqft
+        ].some(value =>
+            value !== undefined &&
+            value !== null &&
+            String(value).trim() !== ""
+        );
 
+
+        // No search parameter
+        if (!hasSearchFilter) {
+
+            return res.status(200).json({
+                success: true,
+                message: "Please provide a search parameter.",
+                data: [],
+                pagination: {
+                    currentPage: page,
+                    totalPages: 0,
+                    totalListings: 0,
+                    perPage: limit,
+                    hasNextPage: false,
+                    hasPreviousPage: false
+                }
+            });
+        }
         const filter = { status: "active" };
         let state_ids = null;
-
         if (state) {
             const states = await stateModel.find({ state: state.trim() }, "_id").lean();
             state_ids = states.map(s => String(s._id));
         }
-
 if (district) {
     const districts = await districtModel
         .find({ district: district.trim() }, "state_id")
         .lean();
-
     const districtStateIds = districts.map(d => String(d.state_id));
-
     state_ids = state_ids.filter(id => districtStateIds.includes(id));
 }
-
 if (state_ids?.length) {
     filter.state_id = { $in: state_ids };
 }
-
         if (deal_type) {
             const docs = await dealTypeModel.find({ name: deal_type.trim() }, "_id").lean();
             filter.deal_type_id = { $in: docs.map(d => d._id) };
@@ -1071,19 +1088,15 @@ if (price_sqft) {
                 .lean(),
             listingModel.countDocuments(filter),
         ]);
-
         const districts = await districtModel
             .find({ state_id: { $in: listings.map(l => l.state_id?._id) } }, "state_id district")
             .lean();
-
         const district_by_state = {};
         for (const d of districts) {
             district_by_state[String(d.state_id)] = d.district;
         }
-
         const data = listings.map(listing => {
             const coordinates = listing.location_id?.location?.coordinates || [];
-
             return {
                 listing_id           : listing._id,
                 listing_code         : listing.listing_code,
@@ -1252,7 +1265,7 @@ export const get_all_listings_by_admin = async (req, res, next) => {
 
 export const change_listing_status = async (req, res, next) => {
     try {
-        const { status } = req.body;
+        const { status , description} = req.body;
         const { listing_id } = req.params;
         const oldStatuss = await listingModel.findById(listing_id, "status").lean();
         const oldStatus = oldStatuss.status;
@@ -1267,6 +1280,11 @@ export const change_listing_status = async (req, res, next) => {
                 returnDocument : "after"
             }
         );
+
+        const notes = await notesModel.create({
+            description ,
+            listing_id
+        })
         const [state, district] = await Promise.all([
             stateModel.findById(listing.state_id, "state").lean(),
             districtModel.findOne({ state_id: listing.state_id }, "district").lean()
@@ -1293,7 +1311,8 @@ export const change_listing_status = async (req, res, next) => {
             listing: {
                 listing_id: listing._id,
                 listing_code: listing.listing_code,
-                status: listing.status
+                status: listing.status,
+                notes
             }
         });
     } catch (err) {
@@ -1750,44 +1769,30 @@ export const get_all_views_count = async (req, res, next) => {
 
 export const publish_listing = async (req, res, next) => {
     try {
-
         const { id } = req.params;
-
         const listing = await listingModel.findById(id);
-
         if (!listing)
             throw new NotFoundError("Listing not found.");
-
         if (listing.status !== "draft")
             throw new BadRequestError("Only draft listings can be pending.");
-
         listing.status = "pending";
         listing.published_at = new Date();
-
         await listing.save();
-
         // Send notification
         const { title , message} =NotificationTemplates.listingStatusChanged({
             listingCode : listing.listing_code,
             status : "pending"
         })
         await createAndSendNotification({
-
     user_id: listing.user_id,
-
     listing_id: listing._id,
-
     notifiable_type: "Listing",
-
     title,
-
     message
-
 });
         return res.status(200).json({
             message: "Listing pending successfully."
         });
-
     } catch (err) {
         next(err);
     }
@@ -1801,7 +1806,6 @@ export const get_all_Top_listing = async ( req , res , next  )=>{
         const page = Math.max(Number(req.query.page) || 1, 1);
         const limit = Math.max(Number(req.query.limit) || 10, 1);
         const skip = (page - 1) * limit;
-
         const result = await listingModel.aggregate([
             {
                 $match: {
@@ -1844,7 +1848,6 @@ export const get_all_Top_listing = async ( req , res , next  )=>{
                 }
             }
         ]);
-
         const totalListings = await listingModel.countDocuments({ status: "active" });
         const totalPages = Math.ceil(totalListings / limit);
         return res.status(200).json({
@@ -1858,3 +1861,925 @@ export const get_all_Top_listing = async ( req , res , next  )=>{
         next ( err );
     }
 }
+
+
+export const get_recently_improved_listings = async (req, res, next) => {
+    try {
+        const sevenDaysAgo = new Date(
+            Date.now() - 7 * 24 * 60 * 60 * 1000
+        );
+        const listings = await listingModel.aggregate([
+            {
+                $match: {
+                    status: "active",
+                    updatedAt: {
+                        $gte: sevenDaysAgo
+                    }
+                }
+            },
+            {
+                $set: {
+                    thumbnail_media_id: {
+                        $arrayElemAt: ["$media_id", 0]
+                    }
+                }
+            },
+            {
+                $lookup: {
+                    from: "media",
+                    localField: "thumbnail_media_id",
+                    foreignField: "_id",
+                    as: "thumbnail"
+                }
+            },
+            {
+                $unwind: {
+                    path: "$thumbnail",
+                    preserveNullAndEmptyArrays: true
+                }
+            },
+            {
+                $project: {
+                    _id: 1,
+                    listing_code: 1,
+                    status: 1,
+                    area: 1,
+                    unit: 1,
+                    updatedAt: 1,
+                    thumbnail: {
+                        $arrayElemAt: [
+                            "$thumbnail.media_url",
+                            0
+                        ]
+                    },
+                    state_id: 1,
+                    feature_tags_id: 1,
+                    terrain_id: 1,
+                    deal_type_id: 1
+                }
+            },
+            {
+                $sort: {
+                    updatedAt: -1
+                }
+            }
+        ]);
+        return res.status(200).json({
+            status: "success",
+            data: {
+                total: listings.length,
+                listings
+            }
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+
+export const get_listing_enquiry_statistics = async (req, res, next) => {
+    try {
+        const [
+            total_listings,
+            under_review_listings,
+            pending_listings,
+            pending_enquiries,
+            need_more_info_enquiries
+        ] = await Promise.all([
+            listingModel.countDocuments(),
+            listingModel.countDocuments({
+                status: "under_review"
+            }),
+            listingModel.countDocuments({
+                status: "pending"
+            }),
+            enquiryModel.countDocuments({
+                status: "pending"
+            }),
+            enquiryModel.countDocuments({
+                status: "need_more_info"
+            })
+        ]);
+        return res.status(200).json({
+            status: "success",
+            data: {
+                total_listings,
+                under_review_listings,
+                pending_listings,
+                pending_enquiries,
+                need_more_info_enquiries
+            }
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+export const get_listing_notes = async (req, res, next) => {
+    try {
+        const { listing_id } = req.params;
+        if (!listing_id) {
+            throw new BadRequestError("Listing ID is required");
+        }
+        if (!mongoose.Types.ObjectId.isValid(listing_id)) {
+            throw new BadRequestError("Invalid listing ID");
+        }
+        const page = Math.max(Number(req.query.page) || 1, 1);
+        const limit = Math.max(Number(req.query.limit) || 10, 1);
+        const skip = (page - 1) * limit;
+        const filter = {
+            listing_id: new mongoose.Types.ObjectId(listing_id)
+        };
+        const [notes, total] = await Promise.all([
+            
+                notesModel.find(filter)
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+            notesModel.countDocuments(filter)
+        ]);
+        const totalPages = Math.ceil(total / limit);
+        return res.status(200).json({
+            status: "success",
+            data: {
+                total,
+                page,
+                limit,
+                totalPages,
+                hasMore: page < totalPages,
+                notes
+            }
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+export const get_listing_dashboard = async (req, res, next) => {
+    try {
+        const page = Math.max(Number(req.query.page) || 1, 1);
+        const limit = Math.max(Number(req.query.limit) || 10, 1);
+        const skip = (page - 1) * limit;
+        const allowedStatuses = [
+            "active",
+            "pending",
+            "under_review",
+            "need_more_info"
+        ];
+        const result = await listingModel.aggregate([
+            {
+                $match: {
+                    status: {
+                        $in: allowedStatuses
+                    }
+                }
+            },
+            {
+                $facet: {
+                    totalListings: [
+                        {
+                            $count: "count"
+                        }
+                    ],
+                    activeListings: [
+                        {
+                            $match: {
+                                status: "active"
+                            }
+                        },
+                        {
+                            $count: "count"
+                        }
+                    ],
+                    pendingListings: [
+                        {
+                            $match: {
+                                status: "pending"
+                            }
+                        },
+                        {
+                            $count: "count"
+                        }
+                    ],
+                    underReviewListings: [
+                        {
+                            $match: {
+                                status: "under_review"
+                            }
+                        },
+                        {
+                            $count: "count"
+                        }
+                    ],
+                    needMoreInfoListings: [
+                        {
+                            $match: {
+                                status: "need_more_info"
+                            }
+                        },
+                        {
+                            $count: "count"
+                        }
+                    ],
+
+                    listings: [
+                        {
+                            $sort: {
+                                createdAt: -1
+                            }
+                        },
+                        {
+                            $skip: skip
+                        },
+                        {
+                            $limit: limit
+                        },
+                        {
+                            $lookup: {
+                                from: "media",
+                                let: {
+                                    mediaIds: "$media_id"
+                                },
+                                pipeline: [
+                                    {
+                                        $match: {
+                                            $expr: {
+                                                $in: [
+                                                    "$_id",
+                                                    "$$mediaIds"
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    {
+                                        $project: {
+                                            _id: 0,
+                                            thumbnail: {
+                                                $arrayElemAt: [
+                                                    "$media_url",
+                                                    0
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    {
+                                        $limit: 1
+                                    }
+                                ],
+                                as: "media"
+                            }
+                        },
+
+                        // Location
+                        {
+                            $lookup: {
+                                from: "locations",
+                                localField: "location_id",
+                                foreignField: "_id",
+                                as: "location"
+                            }
+                        },
+                        {
+                            $project: {
+                                _id: 1,
+                                listing_code: 1,
+                                status: 1,
+                                thumbnail: {
+                                    $arrayElemAt: [
+                                        "$media.thumbnail",
+                                        0
+                                    ]
+                                },
+                                calculated_price: {
+                                    $multiply: [
+                                        "$area",
+                                        "$price_sqft"
+                                    ]
+                                },
+                                unit: 1,
+                                area: 1,
+                                updatedAt: 1,
+                                location: {
+                                    $arrayElemAt: [
+                                        "$location",
+                                        0
+                                    ]
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        ]);
+
+        const data = result[0];
+
+        const total =
+            data.totalListings[0]?.count || 0;
+
+        const active =
+            data.activeListings[0]?.count || 0;
+
+        const pending =
+            data.pendingListings[0]?.count || 0;
+
+        const under_review =
+            data.underReviewListings[0]?.count || 0;
+
+        const need_more_info =
+            data.needMoreInfoListings[0]?.count || 0;
+
+        return res.status(200).json({
+            status: "success",
+            data: {
+                counts: {
+                    total,
+                    active,
+                    pending,
+                    under_review,
+                    need_more_info
+                },
+
+                pagination: {
+                    page,
+                    limit,
+                    totalPages: Math.ceil(total / limit),
+                    hasMore: page < Math.ceil(total / limit)
+                },
+
+                listings: data.listings
+            }
+        });
+
+    } catch (err) {
+        next(err);
+    }
+};
+
+
+// dashboard listing search option
+export const search_dashboard_listings = async (req, res, next) => {
+    try {
+
+        const page = Math.max(
+            Number(req.query.page) || 1,
+            1
+        );
+
+        const limit = Math.max(
+            Number(req.query.limit) || 10,
+            1
+        );
+
+        const skip = (page - 1) * limit;
+
+        const {
+            state,
+            district,
+            category,
+            utilization,
+            relation,
+            terrain,
+            deal_type,
+            feature_tag,
+            is_malay_reserve_land,
+            unit,
+            min_area,
+            max_area,
+            price_sqft
+        } = req.query;
+        const hasSearchFilter = [
+            state,
+            district,
+            category,
+            utilization,
+            relation,
+            terrain,
+            deal_type,
+            feature_tag,
+            is_malay_reserve_land,
+            unit,
+            min_area,
+            max_area,
+            price_sqft
+        ].some(value =>
+            value !== undefined &&
+            value !== null &&
+            String(value).trim() !== ""
+        );
+
+
+        if (!hasSearchFilter) {
+
+            return res.status(200).json({
+                success: true,
+                message: "Please provide a search parameter.",
+                data: [],
+                pagination: {
+                    currentPage: page,
+                    totalPages: 0,
+                    totalListings: 0,
+                    perPage: limit,
+                    hasNextPage: false,
+                    hasPreviousPage: false
+                }
+            });
+        }
+        const filter = {
+            status: {
+                $in: [
+                    "active",
+                    "pending",
+                    "under_review",
+                    "need_more_info"
+                ]
+            }
+        };
+        let state_ids = null;
+
+        if (state) {
+
+            const states = await stateModel
+                .find(
+                    {
+                        state: state.trim()
+                    },
+                    "_id"
+                )
+                .lean();
+
+
+            // State doesn't exist
+            if (!states.length) {
+
+                return res.status(200).json({
+                    success: true,
+                    message: "No listings found.",
+                    data: [],
+                    pagination: {
+                        currentPage: page,
+                        totalPages: 0,
+                        totalListings: 0,
+                        perPage: limit,
+                        hasNextPage: false,
+                        hasPreviousPage: false
+                    }
+                });
+            }
+
+
+            state_ids = states.map(
+                state => state._id
+            );
+        }
+        if (district) {
+
+            const districts = await districtModel
+                .find(
+                    {
+                        district: district.trim()
+                    },
+                    "state_id"
+                )
+                .lean();
+
+
+            // District doesn't exist
+            if (!districts.length) {
+
+                return res.status(200).json({
+                    success: true,
+                    message: "No listings found.",
+                    data: [],
+                    pagination: {
+                        currentPage: page,
+                        totalPages: 0,
+                        totalListings: 0,
+                        perPage: limit,
+                        hasNextPage: false,
+                        hasPreviousPage: false
+                    }
+                });
+            }
+            const districtStateIds =
+                districts.map(
+                    district => String(district.state_id)
+                );
+            if (state_ids) {
+                state_ids = state_ids.filter(
+                    id =>
+                        districtStateIds.includes(
+                            String(id)
+                        )
+                );
+            } else {
+                state_ids =
+                    districts.map(
+                        district => district.state_id
+                    );
+            }
+        }
+        if (state_ids) {
+            if (!state_ids.length) {
+                return res.status(200).json({
+                    success: true,
+                    message: "No listings found.",
+                    data: [],
+                    pagination: {
+                        currentPage: page,
+                        totalPages: 0,
+                        totalListings: 0,
+                        perPage: limit,
+                        hasNextPage: false,
+                        hasPreviousPage: false
+                    }
+                });
+            }
+            filter.state_id = {
+                $in: state_ids
+            };
+        }
+        if (deal_type) {
+            const dealTypes = await dealTypeModel
+                .find(
+                    {
+                        name: deal_type.trim()
+                    },
+                    "_id"
+                )
+                .lean();
+            // Deal type name doesn't exist
+            if (!dealTypes.length) {
+
+                return res.status(200).json({
+                    success: true,
+                    message: "No listings found.",
+                    data: [],
+                    pagination: {
+                        currentPage: page,
+                        totalPages: 0,
+                        totalListings: 0,
+                        perPage: limit,
+                        hasNextPage: false,
+                        hasPreviousPage: false
+                    }
+                });
+            }
+
+
+            filter.deal_type_id = {
+                $in: dealTypes.map(
+                    deal => deal._id
+                )
+            };
+        }
+        if (terrain) {
+
+            const terrains = await terrainTypeModel
+                .find(
+                    {
+                        name: terrain.trim()
+                    },
+                    "_id"
+                )
+                .lean();
+
+
+            if (!terrains.length) {
+
+                return res.status(200).json({
+                    success: true,
+                    message: "No listings found.",
+                    data: [],
+                    pagination: {
+                        currentPage: page,
+                        totalPages: 0,
+                        totalListings: 0,
+                        perPage: limit,
+                        hasNextPage: false,
+                        hasPreviousPage: false
+                    }
+                });
+            }
+
+
+            filter.terrain_id = {
+                $in: terrains.map(
+                    terrain => terrain._id
+                )
+            };
+        }
+        if (feature_tag) {
+
+            const featureTags = await featureTagModel
+                .find(
+                    {
+                        tag: feature_tag.trim()
+                    },
+                    "_id"
+                )
+                .lean();
+
+
+            if (!featureTags.length) {
+
+                return res.status(200).json({
+                    success: true,
+                    message: "No listings found.",
+                    data: [],
+                    pagination: {
+                        currentPage: page,
+                        totalPages: 0,
+                        totalListings: 0,
+                        perPage: limit,
+                        hasNextPage: false,
+                        hasPreviousPage: false
+                    }
+                });
+            }
+
+
+            filter.feature_tags_id = {
+                $in: featureTags.map(
+                    tag => tag._id
+                )
+            };
+        }
+        if (category) {
+            filter.category = category.trim();
+        }
+
+
+        if (utilization) {
+            filter.utilization =
+                utilization.trim();
+        }
+
+
+        if (relation) {
+            filter.relation =
+                relation.trim();
+        }
+
+
+        if (unit) {
+            filter.unit =
+                unit.trim();
+        }
+
+        if (
+            is_malay_reserve_land === "true" ||
+            is_malay_reserve_land === "false"
+        ) {
+
+            filter.is_malay_reserve_land =
+                is_malay_reserve_land === "true";
+        }
+        if (min_area || max_area) {
+
+            filter.area = {};
+
+            if (min_area) {
+
+                filter.area.$gte =
+                    Number(min_area);
+            }
+
+            if (max_area) {
+
+                filter.area.$lte =
+                    Number(max_area);
+            }
+        }
+        if (price_sqft) {
+
+            filter.price_sqft = {
+                $lte: Number(price_sqft)
+            };
+        }
+
+
+        console.log("FINAL FILTER:", filter);
+        const [
+            listings,
+            total
+        ] = await Promise.all([
+
+            listingModel
+                .find(filter)
+                .sort({
+                    createdAt: -1,
+                    _id: -1
+                })
+                .skip(skip)
+                .limit(limit)
+
+                .populate(
+                    "state_id",
+                    "state"
+                )
+
+                .populate(
+                    "deal_type_id",
+                    "name"
+                )
+
+                .populate(
+                    "terrain_id",
+                    "name"
+                )
+
+                .populate(
+                    "feature_tags_id",
+                    "tag"
+                )
+
+                .populate(
+                    "media_id",
+                    "media_url"
+                )
+
+                .populate(
+                    "location_id",
+                    "location"
+                )
+
+                .lean(),
+
+            listingModel.countDocuments(filter)
+        ]);
+        const stateIds = listings
+            .map(
+                listing =>
+                    listing.state_id?._id
+            )
+            .filter(Boolean);
+
+
+        const districts = stateIds.length
+            ? await districtModel
+                .find(
+                    {
+                        state_id: {
+                            $in: stateIds
+                        }
+                    },
+                    "state_id district"
+                )
+                .lean()
+            : [];
+
+
+        const district_by_state = {};
+
+
+        for (const district of districts) {
+
+            district_by_state[
+                String(district.state_id)
+            ] = district.district;
+        }
+        const data = listings.map(
+            listing => {
+
+                const coordinates =
+                    listing.location_id
+                        ?.location
+                        ?.coordinates || [];
+
+
+                return {
+
+                    listing_id:
+                        listing._id,
+
+                    listing_code:
+                        listing.listing_code,
+
+                    status:
+                        listing.status,
+
+                    category:
+                        listing.category,
+
+                    utilization:
+                        listing.utilization,
+
+                    relation:
+                        listing.relation,
+
+                    is_malay_reserve_land:
+                        listing.is_malay_reserve_land,
+
+                    public_description:
+                        listing.public_description,
+
+                    unit:
+                        listing.unit,
+
+                    area:
+                        listing.area,
+
+                    price_sqft:
+                        listing.price_sqft,
+
+                    total_price:
+                        calculate_total_price(
+                            listing.price_sqft,
+                            listing.area,
+                            listing.unit
+                        ),
+
+                    createdAt:
+                        listing.createdAt,
+
+                    state:
+                        listing.state_id?.state
+                        ?? null,
+
+                    district:
+                        district_by_state[
+                            String(
+                                listing.state_id?._id
+                            )
+                        ] ?? null,
+
+                    deal_types:
+                        listing.deal_type_id
+                            ?.flatMap(
+                                deal => deal.name
+                            ) ?? [],
+
+                    terrain:
+                        listing.terrain_id
+                            ?.flatMap(
+                                terrain => terrain.name
+                            ) ?? [],
+
+                    feature_tags:
+                        listing.feature_tags_id
+                            ?.flatMap(
+                                tag => tag.tag
+                            ) ?? [],
+
+                    // First image only
+                    image:
+                        listing.media_id?.[0]
+                            ?.media_url?.[0]
+                            ?? null,
+
+                    location: {
+
+                        longitude:
+                            coordinates[0]
+                            ?? null,
+
+                        latitude:
+                            coordinates[1]
+                            ?? null
+                    }
+                };
+            }
+        );
+
+        const totalPages =
+            Math.ceil(total / limit);
+
+
+        return res.status(200).json({
+
+            success: true,
+
+            message:
+                "Listings fetched successfully.",
+
+            data,
+
+            pagination: {
+
+                currentPage:
+                    page,
+
+                totalPages,
+
+                totalListings:
+                    total,
+
+                perPage:
+                    limit,
+
+                hasNextPage:
+                    page < totalPages,
+
+                hasPreviousPage:
+                    page > 1
+            }
+        });
+
+
+    } catch (err) {
+
+        next(err);
+    }
+};

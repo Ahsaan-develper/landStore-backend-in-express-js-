@@ -138,6 +138,18 @@ export const user_register = async (req, res, next) => {
         if (session.inTransaction()) {
             await session.abortTransaction();
         }
+    if (err.code === 11000) {
+        if (err.keyPattern?.IC) {
+            throw new ConflictError("This IC already exists");
+        }
+        if (err.keyPattern?.phone_number) {
+            throw new ConflictError("This phone number already exists");
+        }
+        if (err.keyPattern?.email) {
+            throw new ConflictError("This email already exists");
+        }
+        throw new ConflictError("Duplicate value already exists");
+    }
         next(err);
     } finally {
         await session.endSession();
@@ -271,6 +283,18 @@ export const keporasi_register = async (req, res, next) => {
         });
 
     } catch (err) {
+        if (err.code === 11000) {
+        if (err.keyPattern?.IC) {
+            throw new ConflictError("This IC already exists");
+        }
+        if (err.keyPattern?.phone_number) {
+            throw new ConflictError("This phone number already exists");
+        }
+        if (err.keyPattern?.email) {
+            throw new ConflictError("This email already exists");
+        }
+        throw new ConflictError("Duplicate value already exists");
+    }
         next(err);
     } finally {
         await session.endSession();
@@ -384,6 +408,18 @@ export const company_register = async (req, res, next) => {
         if (session.inTransaction()) {
             await session.abortTransaction();
         }
+        if (err.code === 11000) {
+        if (err.keyPattern?.IC) {
+            throw new ConflictError("This IC already exists");
+        }
+        if (err.keyPattern?.phone_number) {
+            throw new ConflictError("This phone number already exists");
+        }
+        if (err.keyPattern?.email) {
+            throw new ConflictError("This email already exists");
+        }
+        throw new ConflictError("Duplicate value already exists");
+    }
         next(err);
     } finally {
         await session.endSession();

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { change_listing_status, create_listing, deactivate_listing, get_active_listings, get_all_listings_by_admin, get_all_Top_listing, get_all_views_count, get_draft_listings, get_inactive_listings, get_listing_by_radius, get_listing_by_user, get_pending_listings, get_single_listing, get_under_review_listings, make_draft_by_user, publish_listing, search_listings, update_listing } from "../controller/listing.controller.js";
+import { change_listing_status, create_listing, deactivate_listing, get_active_listings, get_all_listings_by_admin, get_all_Top_listing, get_all_views_count, get_draft_listings, get_inactive_listings, get_listing_by_radius, get_listing_by_user, get_listing_dashboard, get_listing_enquiry_statistics, get_listing_notes, get_pending_listings, get_recently_improved_listings, get_single_listing, get_under_review_listings, make_draft_by_user, publish_listing, search_dashboard_listings, search_listings, update_listing } from "../controller/listing.controller.js";
 import { authorize, optionalAuth, verify_token } from "../middleware/jwt.middleware.js";
 import { upload_listing_to_multer } from "../middleware/multer.middleware.js";
 import { change_listing_status_admin_validator, create_listing_validator, listing_id_validator, listing_page_validator, listing_radius_validator, search_listing_validator, update_listing_validator } from "../middleware/validators/listing.validator.js";
@@ -17,6 +17,12 @@ listing_router.post("/draft" , verify_token ,authorize("individual" , "company" 
 
 // get all user listings
 listing_router.get("/user_listing" , verify_token , listing_page_validator , HandleValidationError, get_listing_by_user )
+
+// notees 
+listing_router.get("/notes/:listing_id" , verify_token , authorize("individual" , "company" , "koperasi" , "super_admin" , "enquiry_admin")  , get_listing_notes)
+
+// get dashboard listings data with count 
+listing_router.get("/dashboard_listing" , verify_token , authorize("super_admin" , "listing_admin")  , get_listing_dashboard)
 
 // get all draft 
 listing_router.get("/all_draft" , verify_token,authorize("individual" , "company" , "koperasi") , listing_page_validator , HandleValidationError, get_draft_listings )
@@ -41,6 +47,10 @@ listing_router.patch("/status_admin/:listing_id" , verify_token  , authorize("su
 // apply filters 
 listing_router.get("/search" , search_listing_validator , HandleValidationError , search_listings)
 
+// dashboard listing search 
+listing_router.get("/search_dashboard_listing" , verify_token , authorize("super_admin" , "listing_admin"),  search_listing_validator , HandleValidationError , search_dashboard_listings)
+
+
 listing_router.get("/zoom_out" , listing_radius_validator , HandleValidationError, get_listing_by_radius)
 
 
@@ -63,3 +73,9 @@ listing_router.patch("/published/:id" , verify_token  ,authorize("individual" , 
 
 
 listing_router.get("/top_listings" , verify_token  ,authorize("super_admin" , "listing_admin" )  , get_all_Top_listing )
+
+// get recently improved listings
+listing_router.get("/recently_improved" , verify_token  ,authorize("super_admin" , "listing_admin" )  , get_recently_improved_listings )
+
+// get all listings enquiry pending , underview , need more info counts
+listing_router.get("/counts" , verify_token  ,authorize("super_admin" , "listing_admin" )  , get_listing_enquiry_statistics )

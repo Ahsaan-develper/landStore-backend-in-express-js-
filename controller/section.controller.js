@@ -43,8 +43,8 @@ export const create_section = async ( req  , res , next )=>{
     }
 }
 
-// get all sections 
-export const get_all_section = async (req, res, next) => {
+// get all sections by admin
+export const get_all_section_by_admin= async (req, res, next) => {
   try {
     const page  = Math.max(Number(req.query.page)  || 1,  1);
     const limit = Math.max(Number(req.query.limit) || 10, 1);
@@ -3786,6 +3786,135 @@ export const get_all_sections = async (req, res, next) => {
 
         const cardSkip = (cardPage - 1) * cardLimit;
 
+        const card_detail_stages = [
+            {
+                $lookup: {
+                    from: "styles",
+                    localField: "style_id",
+                    foreignField: "_id",
+                    as: "style"
+                }
+            },
+            { $unwind: { path: "$style", preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: "carddatas",
+                    localField: "card_data_id",
+                    foreignField: "_id",
+                    as: "card_data"
+                }
+            },
+            { $unwind: { path: "$card_data", preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: "media",
+                    localField: "media_id",
+                    foreignField: "_id",
+                    as: "media"
+                }
+            },
+            { $unwind: { path: "$media", preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: "icons",
+                    localField: "_id",
+                    foreignField: "card_id",
+                    as: "icon"
+                }
+            },
+            { $unwind: { path: "$icon", preserveNullAndEmptyArrays: true } },
+            {
+                $lookup: {
+                    from: "cardmetas",
+                    localField: "_id",
+                    foreignField: "card_id",
+                    as: "meta"
+                }
+            },
+            { $unwind: { path: "$meta", preserveNullAndEmptyArrays: true } },
+            {
+                $project: {
+                    _id: 1,
+                    card_name: 1,
+                    createdAt: 1,
+                    style: {
+                        padding: 1,
+                        background_color: 1,
+                        border_color: 1
+                    },
+                    card_data: {
+                        heading: 1,
+                        heading_color: 1,
+                        heading_alignment: 1,
+                        sub_heading: 1,
+                        sub_heading_color: 1,
+                        sub_heading_alignment: 1,
+                        description: 1,
+                        description_color: 1,
+                        description_alignment: 1
+                    },
+                    media: {
+                        media_url: 1,
+                        public_id: 1
+                    },
+                    icon: {
+                        card_icon: 1,
+                        icon_color: 1,
+                        icon_alignment: 1
+                    },
+                    meta: {
+                        link: 1,
+                        link_color: 1,
+                        link_alignment: 1,
+                        date: 1,
+                        date_color: 1,
+                        date_alignment: 1,
+                        tag: 1
+                    }
+                }
+            }
+        ];
+        const paged_list = ({ from, match, sort, detail, as }) => [
+            {
+                $lookup: {
+                    from,
+                    let: { parentId: "$_id" },
+                    pipeline: [
+                        { $match: { $expr: match } },
+                        { $sort: sort },
+                        { $skip: cardSkip },
+                        { $limit: cardLimit },
+                        ...detail
+                    ],
+                    as
+                }
+            },
+            {
+                $lookup: {
+                    from,
+                    let: { parentId: "$_id" },
+                    pipeline: [
+                        { $match: { $expr: match } },
+                        { $count: "total" }
+                    ],
+                    as: `${as}_count`
+                }
+            }
+        ];
+
+        const total_of = (as) => ({
+            $ifNull: [{ $arrayElemAt: [`$${as}_count.total`, 0] }, 0]
+        });
+
+        const list_or_remove = (as) => ({
+            $cond: [{ $gt: [total_of(as), 0] }, `$${as}`, "$$REMOVE"]
+        });
+
+        const total_or_remove = (as) => ({
+            $cond: [{ $gt: [total_of(as), 0] }, total_of(as), "$$REMOVE"]
+        });
+
+        const not_deleted = { $ne: ["$is_deleted", true] };
 
         const sections = await state_sectionModel.aggregate([
             {
@@ -3793,189 +3922,309 @@ export const get_all_sections = async (req, res, next) => {
                     status: "active"
                 }
             },
-            // {
-            //     $sort: {
-            //         order: 1
-            //     }
-            // },
             {
-                $lookup: {
-                    from: "containerstyles",
-                    localField: "_id",
-                    foreignField: "state_section_id",
-                    as: "container"
+                $sort: {
+                    order: 1
                 }
             },
 
+            // at most one container per section (unique index), so nest it as an object
             {
                 $lookup: {
-                    from: "styles",
-                    localField: "container.style_id",
-                    foreignField: "_id",
-                    as: "container_style"
+                    from: "containerstyles",
+                    let: { sectionId: "$_id" },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: { $eq: ["$state_section_id", "$$sectionId"] }
+                            }
+                        },
+                        {
+                            $lookup: {
+                                from: "styles",
+                                localField: "style_id",
+                                foreignField: "_id",
+                                as: "style"
+                            }
+                        },
+                        { $unwind: { path: "$style", preserveNullAndEmptyArrays: true } },
+                        {
+                            $project: {
+                                _id: 1,
+                                alignment: 1,
+                                style: {
+                                    padding: 1,
+                                    background_color: 1,
+                                    border_color: 1
+                                }
+                            }
+                        },
+                        { $limit: 1 }
+                    ],
+                    as: "container"
                 }
             },
+            { $unwind: { path: "$container", preserveNullAndEmptyArrays: true } },
+
+            // same for the button
             {
                 $lookup: {
                     from: "buttonstyles",
-                    localField: "_id",
-                    foreignField: "state_section_id",
+                    let: { sectionId: "$_id" },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: { $eq: ["$state_section_id", "$$sectionId"] }
+                            }
+                        },
+                        {
+                            $lookup: {
+                                from: "styles",
+                                localField: "style_id",
+                                foreignField: "_id",
+                                as: "style"
+                            }
+                        },
+                        { $unwind: { path: "$style", preserveNullAndEmptyArrays: true } },
+                        {
+                            $project: {
+                                _id: 1,
+                                button_text: 1,
+                                button_color: 1,
+                                button_link: 1,
+                                style: {
+                                    padding: 1,
+                                    background_color: 1,
+                                    border_color: 1
+                                }
+                            }
+                        },
+                        { $limit: 1 }
+                    ],
                     as: "button"
                 }
             },
-            {
-                $lookup: {
-                    from: "styles",
-                    localField: "button.style_id",
-                    foreignField: "_id",
-                    as: "button_style"
-                }
-            },
+            { $unwind: { path: "$button", preserveNullAndEmptyArrays: true } },
+
             {
                 $lookup: {
                     from: "contentstyles",
-                    localField: "_id",
-                    foreignField: "state_section_id",
+                    let: { sectionId: "$_id" },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $and: [
+                                        { $eq: ["$state_section_id", "$$sectionId"] },
+                                        not_deleted
+                                    ]
+                                }
+                            }
+                        },
+                        {
+                            $lookup: {
+                                from: "carddatas",
+                                localField: "card_data_id",
+                                foreignField: "_id",
+                                as: "card_data"
+                            }
+                        },
+                        { $unwind: { path: "$card_data", preserveNullAndEmptyArrays: true } },
+                        {
+                            $lookup: {
+                                from: "styles",
+                                localField: "style_id",
+                                foreignField: "_id",
+                                as: "style"
+                            }
+                        },
+                        { $unwind: { path: "$style", preserveNullAndEmptyArrays: true } },
+                        {
+                            $lookup: {
+                                from: "media",
+                                localField: "media_id",
+                                foreignField: "_id",
+                                as: "media"
+                            }
+                        },
+                        { $unwind: { path: "$media", preserveNullAndEmptyArrays: true } },
+                        ...paged_list({
+                            from: "cardstyles",
+                            match: {
+                                $and: [
+                                    { $eq: ["$content_id", "$$parentId"] },
+                                    not_deleted
+                                ]
+                            },
+                            sort: { createdAt: -1 },
+                            detail: card_detail_stages,
+                            as: "cards"
+                        }),
+
+                        ...paged_list({
+                            from: "testimonials",
+                            match: { $eq: ["$content_id", "$$parentId"] },
+                            sort: { createdAt: 1 },
+                            as: "testimonial_cards",
+                            detail: [
+                                {
+                                    $lookup: {
+                                        from: "styles",
+                                        localField: "style_id",
+                                        foreignField: "_id",
+                                        as: "style"
+                                    }
+                                },
+                                { $unwind: { path: "$style", preserveNullAndEmptyArrays: true } },
+                                {
+                                    $project: {
+                                        _id: 1,
+                                        testimonial_name: 1,
+                                        testimonial: 1,
+                                        testimonial_color: 1,
+                                        testimonial_alignment: 1,
+                                        customer: 1,
+                                        customer_alignment: 1,
+                                        customer_color: 1,
+                                        username: 1,
+                                        username_color: 1,
+                                        username_alignment: 1,
+                                        style: {
+                                            padding: 1,
+                                            background_color: 1,
+                                            border_color: 1
+                                        }
+                                    }
+                                }
+                            ]
+                        }),
+                        {
+                            $lookup: {
+                                from: "menus",
+                                let: { contentId: "$_id" },
+                                pipeline: [
+                                    {
+                                        $match: {
+                                            $expr: { $eq: ["$content_id", "$$contentId"] }
+                                        }
+                                    },
+                                    { $sort: { createdAt: 1 } },
+                                    {
+                                        $lookup: {
+                                            from: "styles",
+                                            localField: "style_id",
+                                            foreignField: "_id",
+                                            as: "style"
+                                        }
+                                    },
+                                    { $unwind: { path: "$style", preserveNullAndEmptyArrays: true } },
+                                    {
+                                        $project: {
+                                            _id: 1,
+                                            menu: 1,
+                                            menu_name: 1,
+                                            menu_color: 1,
+                                            menu_alignment: 1,
+                                            link: 1,
+                                            style: {
+                                                padding: 1,
+                                                background_color: 1,
+                                                border_color: 1
+                                            }
+                                        }
+                                    }
+                                ],
+                                as: "menu_cards"
+                            }
+                        },
+                        {
+                            $lookup: {
+                                from: "cardcategories",
+                                let: { contentId: "$_id" },
+                                pipeline: [
+                                    {
+                                        $match: {
+                                            $expr: { $eq: ["$content_id", "$$contentId"] }
+                                        }
+                                    },
+                                    { $sort: { createdAt: 1 } },
+                                    ...paged_list({
+                                        from: "cardstyles",
+                                        match: {
+                                            $and: [
+                                                { $eq: ["$card_category_id", "$$parentId"] },
+                                                not_deleted
+                                            ]
+                                        },
+                                        sort: { createdAt: -1 },
+                                        detail: card_detail_stages,
+                                        as: "cards"
+                                    }),
+                                    {
+                                        $project: {
+                                            _id: 1,
+                                            category_name: 1,
+                                            cards: 1,
+                                            cards_total: total_of("cards")
+                                        }
+                                    }
+                                ],
+                                as: "cards_category"
+                            }
+                        },
+
+                        {
+                            $project: {
+                                _id: 1,
+                                card_gap: 1,
+                                copy_right: 1,
+                                card_data: {
+                                    heading: 1,
+                                    heading_color: 1,
+                                    heading_alignment: 1,
+                                    sub_heading: 1,
+                                    sub_heading_color: 1,
+                                    sub_heading_alignment: 1,
+                                    description: 1,
+                                    description_color: 1,
+                                    description_alignment: 1
+                                },
+                                style: {
+                                    padding: 1,
+                                    background_color: 1,
+                                    border_color: 1
+                                },
+                                media: {
+                                    media_url: 1,
+                                    public_id: 1
+                                },
+                                cards: list_or_remove("cards"),
+                                cards_total: total_or_remove("cards"),
+                                testimonial_cards: list_or_remove("testimonial_cards"),
+                                testimonial_cards_total: total_or_remove("testimonial_cards"),
+                                menu_cards: {
+                                    $cond: [
+                                        { $gt: [{ $size: "$menu_cards" }, 0] },
+                                        "$menu_cards",
+                                        "$$REMOVE"
+                                    ]
+                                },
+                                cards_category: {
+                                    $cond: [
+                                        { $gt: [{ $size: "$cards_category" }, 0] },
+                                        "$cards_category",
+                                        "$$REMOVE"
+                                    ]
+                                }
+                            }
+                        },
+                        { $limit: 1 }
+                    ],
                     as: "content"
                 }
             },
-            {
-                $lookup: {
-                    from: "carddatas",
-                    localField: "content.card_data_id",
-                    foreignField: "_id",
-                    as: "content_data"
-                }
-            },
-            {
-                $lookup: {
-                    from: "styles",
-                    localField: "content.style_id",
-                    foreignField: "_id",
-                    as: "content_style"
-                }
-            },
-            {
-                $lookup: {
-                    from: "media",
-                    localField: "content.media_id",
-                    foreignField: "_id",
-                    as: "content_media"
-                }
-            },
-            
-            {
-                $lookup : {
-                    from : "testimonials",
-                    localField : "content._id",
-                    foreignField : "content_id",
-                    as : "testimonial_cards"
-                }
-            },
-            {
-                $lookup : {
-                    from : "styles",
-                    localField : "testimonial_cards.style_id",
-                    foreignField : "_id",
-                    as : "testimonial_cards_style"
-                }
-            },
-            {
-                $lookup : {
-                    from : "menus",
-                    localField : "content._id",
-                    foreignField : "content_id",
-                    as : "menu_cards"
-                }
-            },
-            {
-                $lookup : {
-                    from : "styles",
-                    localField : "menu_cards.style_id",
-                    foreignField : "_id",
-                    as : "menu_cards_style"
-                }
-            },
-            {
-                $lookup : {
-                    from : "cardstyles",
-                    localField : "content._id",
-                    foreignField : "content_id", 
-                    as : "cards"
-                }
-            },
-            {
-                $lookup: {
-                    from: "icons",
-                    localField: "cards._id",
-                    foreignField: "card_id",
-                    as: "card_icon"
-                }
-            },
-            {
-                $lookup: {
-                    from: "carddatas",
-                    localField: "cards.card_data_id",
-                    foreignField: "_id",
-                    as: "card_data"
-                }
-            },
-            {
-                $lookup: {
-                    from: "styles",
-                    localField: "cards.style_id",
-                    foreignField: "_id",
-                    as: "card_styles"
-                }
-            },
-            {
-                $lookup : {
-                    from : "cardcategorys",
-                    localField : "content._id",
-                    foreignField : "content_id", 
-                    as : "cards_category"
-                }
-            },
-            {
-                $lookup: {
-                    from: "cardstyles",
-                    localField: "cards_category._id",
-                    foreignField: "card_category_id",
-                    as: "category_cards"
-                }
-            },
-            {
-                $lookup: {
-                    from: "carddatas",
-                    localField: "category_cards.card_data_id",
-                    foreignField: "_id",
-                    as: "category_cards_data"
-                }
-            },
-            {
-                $lookup: {
-                    from: "cardmetas",
-                    localField: "category_cards._id",
-                    foreignField: "card_id",
-                    as: "category_cards_meta_data"
-                }
-            },
-            {
-                $lookup: {
-                    from: "media",
-                    localField: "category_cards.media_id",
-                    foreignField: "_id",
-                    as: "category_cards_media"
-                }
-            },
-            {
-                $lookup: {
-                    from: "styles",
-                    localField: "category_cards.style_id",
-                    foreignField: "_id",
-                    as: "category_cards_style"
-                }
-            },
+            { $unwind: { path: "$content", preserveNullAndEmptyArrays: true } },
+
             {
                 $project: {
                     _id: 1,
@@ -3984,135 +4233,13 @@ export const get_all_sections = async (req, res, next) => {
                     description: 1,
                     status: 1,
                     order: 1,
-                    container: {
-                        alignment :  1,
-                    },
-                    container_style: {
-                        padding : 1,
-                        background_color : 1
-                    },
-                    content: {
-                        cards_gap :  1,
-                        // cop_right : 1
-                    },
-                    content_style: {
-                        padding :  1 
-                    },
-                    content_media: {
-                        media_url : 1 ,
-                        public_id : 1
-                    },
-                    content_data : {
-                        heading : 1 ,
-                        heading_alignment : 1 ,
-                        heading_color : 1 ,
-                        sub_heading : 1 ,
-                        sub_heading_alignment : 1 ,
-                        sub_heading_color : 1 ,
-                    },
-                    cards_category : {
-                        _id : 1  ,
-                        category_name : 1
-                    } ,
-                    category_cards:  {
-                        _id : 1 ,
-                        card_name : 1 ,
-                        createdAt : 1 
-                    },
-                    category_cards_data: {
-                        heading : 1 ,
-                        heading_color : 1 ,
-                        heading_alignment : 1 ,
-                        description : 1 ,
-                        description_color : 1 ,
-                        description_alignment : 1 ,
-                    } ,
-                    category_cards_media:  {
-                        media_url : 1 ,
-                        public_id : 1 
-                    },
-                    category_cards_style:  {
-                        padding  : 1 ,
-                        background_color : 1 ,
-                        border_color :  1
-                    },
-                    category_cards_meta_data: {
-                        link :  1 ,
-                        link_color :  1 ,
-                        link_alignment :  1 ,
-                        date : 1 ,
-                        date_color : 1 ,
-                        date_alignment : 1 ,
-                        tag :  1
-                    },
-                    testimonial_cards : {
-                        testimonial_name : 1 ,
-                        testimonial : 1 ,
-                        testimonial_color : 1 ,
-                        testimonial_alignment : 1 ,
-                        customer : 1 ,
-                        customer_alignment : 1 ,
-                        customer_color : 1 ,
-                        username : 1 ,
-                        username_color : 1 ,
-                        username_alignment : 1 ,
-                    },
-                    testimonial_cards_style : {
-                        padding :  1 ,
-                        border_color : 1 ,
-                        border_color : 1
-                    } ,
-                    menu_cards : {
-                        menu : 1 ,
-                        menu_color : 1 ,
-                        menu_alignment : 1 ,
-                        link : 1 ,
-                        link_color : 1 ,
-                        link_alignment : 1 ,
-                    } ,
-                    menu_cards_style : {
-                        padding :  1,
-                        background : 1 ,
-                        border_color :  1
-                    } ,
-                    button: {
-                        button_text :  1,
-                        button_color : 1,
-                        button_link : 1,
-                    },  
-                    button_style :  {
-                        padding : 1 ,
-                        border_color : 1,
-                        background_color :  1
-                    },
-                    cards: {
-                        _id : 1 ,
-                        card_name : 1
-                    },
-                    card_icon : {
-                        card_icon :1 ,
-                        icon_color : 1 ,
-                        icon_alignment : 1
-                    },
-                    card_styles: {
-                        padding : 1,
-                        background_color : 1 ,
-                        border_color : 1
-                    },
-                    card_data: {
-                        heading : 1 ,
-                        heading_color : 1 ,
-                        heading_alignment : 1 ,
-                        sub_heading : 1 ,
-                        sub_heading_color : 1 ,
-                        sub_heading_alignment : 1 ,
-                        description : 1 ,
-                        description_color : 1 ,
-                        description_alignment : 1 ,
-                    },
+                    container: 1,
+                    button: 1,
+                    content: 1
                 }
             }
         ]);
+
         res.status(200).json({
             sections,
             pagination: {

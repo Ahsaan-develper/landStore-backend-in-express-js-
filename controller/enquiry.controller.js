@@ -9,6 +9,7 @@ import { NotificationTemplates } from "../template/notification.template.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../utils/error.utils.js";
 import { enquiry_code_generator } from "../utils/unique_code_generator.utils.js";
 import mongoose from "mongoose";
+import notesModel from "../models/notes.model.js";
 // create an enquiry 
 export const create_enquiry = async (req, res, next) => {
     try {
@@ -344,7 +345,7 @@ export const get_all_enquiry_by_admin = async (req, res, next) => {
 // change enquiry status by admin
 export const change_enquiry_status = async (req, res, next) => {
     try {
-        const {  status } = req.body;
+        const {  status  , description} = req.body;
         const { enquiry_id } = req.params;
         const enquiry = await enquiryModel.findById(enquiry_id).select(
             "_id enquiry_code user_id status"
@@ -360,12 +361,16 @@ export const change_enquiry_status = async (req, res, next) => {
         const oldStatus = enquiry.status;
         enquiry.status = status;
         await enquiry.save();
-        // Notification
         const template = NotificationTemplates.enquiryStatusChanged({
             enquiryCode: enquiry.enquiry_code,
             oldStatus,
             newStatus: status
         });
+
+        const notes_data = await notesModel.create({
+            description ,
+            enquiry_id ,
+        })
         const io = req.app.get("io");
         await createAndSendNotification(io,{
             user_id : enquiry.user_id,
@@ -381,6 +386,7 @@ export const change_enquiry_status = async (req, res, next) => {
                 enquiry_code: enquiry.enquiry_code,
                 status: enquiry.status,
                 updatedAt: enquiry.updatedAt
+
             }
         });
     } catch (err) {
@@ -679,6 +685,57 @@ export const get_geran_docs_by_enquiry = async (req, res, next) => {
             success: true,
             message: "Geran documents fetched successfully.",
             data: geran_urls,
+        });
+
+    } catch (err) {
+        next(err);
+    }
+};
+
+
+export const get_enquiry_notes = async (req, res, next) => {
+    try {
+        const { enquiry_id } = req.params;
+
+        if (!enquiry_id) {
+            throw new BadRequestError("Enquiry ID is required");
+        }
+
+        if (!mongoose.Types.ObjectId.isValid(enquiry_id)) {
+            throw new BadRequestError("Invalid enquiry ID");
+        }
+
+        const page = Math.max(Number(req.query.page) || 1, 1);
+        const limit = Math.max(Number(req.query.limit) || 10, 1);
+        const skip = (page - 1) * limit;
+
+        const filter = {
+            enquiry_id: new mongoose.Types.ObjectId(enquiry_id)
+        };
+
+        const [notes, total] = await Promise.all([
+            
+                notesModel.find(filter)
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+
+            notesModel.countDocuments(filter)
+        ]);
+
+        const totalPages = Math.ceil(total / limit);
+
+        return res.status(200).json({
+            status: "success",
+            data: {
+                total,
+                page,
+                limit,
+                totalPages,
+                hasMore: page < totalPages,
+                notes
+            }
         });
 
     } catch (err) {

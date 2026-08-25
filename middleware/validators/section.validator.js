@@ -39,7 +39,8 @@ export const create_container_validator = [
 
     body("background_color")
     .trim()
-    .notEmpty().withMessage("Please enter background_color here "),
+    .notEmpty().withMessage(" Please provide background color ").bail()
+    .matches(/^#[0-9A-Fa-f]{6}$/).withMessage("Background color code must as e.g. #ffffff"),
 
     body("container_alignment")
     .trim()
@@ -59,11 +60,12 @@ export const section_id_validator = [
 export const card_style_validator =[
     body("background_color")
     .trim()
-    .notEmpty().withMessage("Please enter background color code  "),
-
+    .notEmpty().withMessage(" Please provide background color ").bail()
+    .matches(/^#[0-9A-Fa-f]{6}$/).withMessage("Background color code must as e.g. #ffffff"),
     body("border_color")
     .trim()
-    .notEmpty().withMessage("Please enter button border color  "),
+    .notEmpty().withMessage(" Please provide border color ").bail()
+    .matches(/^#[0-9A-Fa-f]{6}$/).withMessage("Border color code must as e.g. #ffffff"),
 ]
 
 export const create_button_validator = [
@@ -73,7 +75,8 @@ export const create_button_validator = [
     
     body("text_color")
     .trim()
-    .notEmpty().withMessage("Please enter button text color code  "),
+    .notEmpty().withMessage(" Please provide button color ").bail()
+    .matches(/^#[0-9A-Fa-f]{6}$/).withMessage("Button color code must as e.g. #ffffff"),
 
     body("button_link")
     .trim()
@@ -81,7 +84,8 @@ export const create_button_validator = [
 
     body("background_color")
     .trim()
-    .notEmpty().withMessage("Please enter background color code  "),
+    .notEmpty().withMessage(" Please provide background color ").bail()
+    .matches(/^#[0-9A-Fa-f]{6}$/).withMessage("background color code must as e.g. #ffffff"),
 
     body("border_color")
     .trim()
@@ -105,7 +109,8 @@ export const card_data_validator =[
 
     body("heading_color")
     .trim()
-    .notEmpty().withMessage("Please enter heading color  "),
+    .notEmpty().withMessage(" Please provide heading color ").bail()
+    .matches(/^#[0-9A-Fa-f]{6}$/).withMessage("Heading color code must as e.g. #ffffff"),
 
     body("heading_alignment")
     .trim()
@@ -118,7 +123,8 @@ export const card_data_validator =[
 
     body("description_color")
     .trim()
-    .notEmpty().withMessage("Please enter description color   "),
+    .notEmpty().withMessage(" Please provide description color ").bail()
+    .matches(/^#[0-9A-Fa-f]{6}$/).withMessage("Description color code must as e.g. #ffffff"),
 
     body("description_alignment")
     .trim()
@@ -185,7 +191,8 @@ export const create_testimonial_card_validator = [
 
     body("testimonial_color")
     .trim()
-    .notEmpty().withMessage(" Please enter testimonial color"),
+    .notEmpty().withMessage(" Please provide testimonial color ").bail()
+    .matches(/^#[0-9A-Fa-f]{6}$/).withMessage("Testimonial color code must as e.g. #ffffff"),
 
     body("testimonial_alignment")
     .trim()
@@ -197,7 +204,8 @@ export const create_testimonial_card_validator = [
 
     body("customer_color")
     .trim()
-    .notEmpty().withMessage(" Please enter customer color  "),
+    .notEmpty().withMessage(" Please provide customer color ").bail()
+    .matches(/^#[0-9A-Fa-f]{6}$/).withMessage("Customer color code must as e.g. #ffffff"),
 
     body("customer_alignment")
     .trim()
@@ -209,7 +217,8 @@ export const create_testimonial_card_validator = [
 
     body("username_color")
     .trim()
-    .notEmpty().withMessage(" Please enter username  color "),
+    .notEmpty().withMessage(" Please provide username color ").bail()
+    .matches(/^#[0-9A-Fa-f]{6}$/).withMessage("Username color code must as e.g. #ffffff"),
 
     body("username_alignment")
     .trim()
@@ -230,7 +239,8 @@ export const  create_menu_card_validator = [
 
     body("menu_color")
     .trim()
-    .notEmpty().withMessage("Please enter menu color "),
+    .notEmpty().withMessage(" Please provide menu color ").bail()
+    .matches(/^#[0-9A-Fa-f]{6}$/).withMessage("Menu color code must as e.g. #ffffff"),
 
     body("menu_alignment")
     .trim()
@@ -250,30 +260,31 @@ export const news_card_validator = [
 
     body("link_color")
     .trim()
-    .notEmpty().withMessage("Please enter link color"),
+    .notEmpty().withMessage(" Please provide link color ").bail()
+    .matches(/^#[0-9A-Fa-f]{6}$/).withMessage("Link color code must as e.g. #ffffff"),
 
     body("link_alignment")
     .trim()
     .notEmpty().withMessage("Please enter link alignment "),
 
-   body("date")
+    body("date")
     .trim()
     .matches(/^\d{1,2}\s(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s\d{4}$/i)
     .withMessage("Date must be in format: 16 Dec 2026")
     .custom(value => {
         const parsed = new Date(value);
-
         if (isNaN(parsed.getTime())) {
             throw new Error("Invalid date value");
         }
-
+        if (parsed <= new Date()) {
+            throw new Error("Date must be in the future");
+        }
         return true;
     }),
-
     body("date_color")
     .trim()
-    .notEmpty().withMessage("Please enter date color "),
-
+    .notEmpty().withMessage(" Please provide date color ").bail()
+    .matches(/^#[0-9A-Fa-f]{6}$/).withMessage("Date color code must as e.g. #ffffff"),
     body("date_alignment")
     .trim()
     .notEmpty().withMessage("Please enter date alignment "),

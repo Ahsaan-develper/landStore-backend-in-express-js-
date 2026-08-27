@@ -13,12 +13,10 @@ import mongoose from "mongoose";
 import { linkVisitorToUser } from "../utils/make_visitor_user.js";
 
 
-
 import { request_email_verification, request_password_reset, update_password, verify_email } from "../services/auth.service.js";
 export const user_register = async (req, res, next) => {
     const session = await mongoose.startSession();
     try {
-
         const {
             fullname,
             email,

@@ -2120,14 +2120,11 @@ if (bottom !== undefined) {
 if (left !== undefined) {
     style_data["padding.left"] = left;
 }
-
         const existing_content = await contentModel.findById(section_id);
 
         if (!existing_content) {
             throw new NotFoundError("Content not found");
         }
-        
-
         const updated_style = await styleModel.findByIdAndUpdate(
             existing_content.style_id ,
             {
@@ -2137,9 +2134,6 @@ if (left !== undefined) {
                 returnDocument : "after"
             }
         )
-
-
-
         const updated_content = await contentModel.findByIdAndUpdate(
             section_id,
             {
@@ -3288,6 +3282,7 @@ export const get_testimonial_section = async (req, res, next) => {
                         description_alignment : 1 ,
                     },
                     testimonial_cards : {
+                        _id : 1 ,
                         testimonial_name : 1,
                         testimonial : 1,
                         testimonial_color : 1,

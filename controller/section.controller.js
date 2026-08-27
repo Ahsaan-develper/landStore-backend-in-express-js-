@@ -4172,7 +4172,6 @@ export const get_all_sections = async (req, res, next) => {
                                 as: "cards_category"
                             }
                         },
-
                         {
                             $project: {
                                 _id: 1,

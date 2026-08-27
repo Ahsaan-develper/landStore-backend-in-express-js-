@@ -550,18 +550,12 @@ export const enquiry_message_socket = (io, socket) => {
                             as: "media"
                         }
                     },
-
                     {
                         $project: {
-
                             _id: 0,
-
                             message_id: "$_id",
-
                             enquiry_id: 1,
-
                             body: 1,
-
                             is_read: 1,
                             read_at: 1,
                             createdAt: 1,

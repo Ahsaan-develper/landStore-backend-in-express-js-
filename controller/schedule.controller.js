@@ -4,6 +4,7 @@ import scheduleModel from "../models/schedule.model.js";
 import { BadRequestError, NotFoundError } from "../utils/error.utils.js";
 import { NotificationTemplates } from "../template/notification.template.js";
 import { createAndSendNotification } from "../services/notification.service.js"
+import messageModel from "../models/message.model.js";
 
 // make schedule
 export const make_schedule = async (req, res, next) => {
@@ -63,6 +64,44 @@ await createAndSendNotification(io,{
     title: template.title,
     message: template.message
 });
+
+    const message = await messageModel.create({
+          enquiry_id: enquiry._id,
+
+                sender_id: admin_id,
+
+                body: template.message,
+
+                media_id: [],
+
+                is_read: false
+    });
+
+    const room =  `enquiry:${enquiry_id}`;
+
+    const sockets = await io.in(room).fetchSockets();
+
+    const userSockets = sockets.filter(socket=>
+        socket.user?.sub?.toString() ===
+                enquiry.user_id?.toString()
+    )
+    for (const userSocket of userSockets) {
+
+            io.to(userSocket.id).emit(
+                "newMessage",
+                {
+                    message_id: message._id,
+                    enquiry_id: message.enquiry_id,
+                    sender_id: message.sender_id,
+                    body: message.body,
+                    media: null,
+                    is_read: message.is_read,
+                    createdAt: message.createdAt,
+                    schedule_id: schedule._id
+                }
+            );
+
+        }
 return res.status(201).json({
     message: "Visit scheduled successfully.",
     schedule: {
@@ -80,14 +119,16 @@ return res.status(201).json({
         next(err);
     }
 };
-
-
 export const change_schedule_status = async (req, res, next) => {
-    try {
 
-        const {  status } = req.body;
+    try {  
+        const { status } = req.body;
         const { schedule_id } = req.params;
-        // Fetch schedule
+
+        const admin_id = req.user.sub;
+
+
+        // Find schedule
         const schedule = await scheduleModel
             .findById(schedule_id)
             .select("status enquiry_id visit_date");
@@ -96,20 +137,34 @@ export const change_schedule_status = async (req, res, next) => {
             throw new NotFoundError("Schedule not found.");
         }
 
+
+        // Check old status
         const oldStatus = schedule.status;
 
         if (oldStatus === status) {
+
             return res.status(200).json({
-                message: "Schedule already has this status.",
+
+                message:
+                    "Schedule already has this status.",
+
                 data: {
                     schedule_id: schedule._id,
                     status: schedule.status
                 }
+
             });
+
         }
+
+
+        // Update status
         schedule.status = status;
+
         await schedule.save();
 
+
+        // Find enquiry
         const enquiry = await enquiryModel
             .findById(schedule.enquiry_id)
             .select("_id user_id");
@@ -117,37 +172,132 @@ export const change_schedule_status = async (req, res, next) => {
         if (!enquiry) {
             throw new NotFoundError("Enquiry not found.");
         }
+        
 
-        // Create notification
-        const template = NotificationTemplates.schedulestatus({
-            oldStatus,
-            newStatus: status
-        });
-        const io = req.app.get("io")
-        await createAndSendNotification(io,{
+        // Notification template
+        const template =
+            NotificationTemplates.schedulestatus({
+
+                oldStatus,
+                newStatus: status
+
+            });
+
+
+        // Socket.IO
+        const io = req.app.get("io");
+
+        await createAndSendNotification(io, {
+
             user_id: enquiry.user_id,
+
             enquiry_id: enquiry._id,
+
             schedule_id: schedule._id,
+
             notifiable_type: "Schedule",
+
             title: template.title,
+
             message: template.message
+
         });
 
+        const message = await messageModel.create({
+
+            enquiry_id: enquiry._id,
+
+            sender_id: admin_id,
+
+            body: template.message,
+
+            media_id: [],
+
+            is_read: false
+
+        });
+        
+        const room =
+            `enquiry:${schedule.enquiry_id}`;
+
+
+        const sockets =
+            await io
+                .in(room)
+                .fetchSockets();
+
+
+        const userSockets =
+            sockets.filter(socket =>
+
+                socket.user?.sub?.toString() ===
+                enquiry.user_id?.toString()
+
+            );
+        
+        for (const userSocket of userSockets) {
+
+            io.to(userSocket.id).emit(
+                "newMessage",
+                {
+
+                    message_id:
+                        message._id,
+
+                    enquiry_id:
+                        message.enquiry_id,
+
+                    sender_id:
+                        message.sender_id,
+
+                    body:
+                        message.body,
+
+                    media: null,
+
+                    is_read:
+                        message.is_read,
+
+                    createdAt:
+                        message.createdAt,
+
+                    schedule_id:
+                        schedule._id
+
+                }
+            );
+
+        }
         return res.status(200).json({
-            message: "Schedule status updated successfully.",
+
+            message:
+                "Schedule status updated successfully.",
+
             data: {
-                schedule_id: schedule._id,
-                enquiry_id: enquiry._id,
-                status: schedule.status,
-                updatedAt: schedule.updatedAt
+
+                schedule_id:
+                    schedule._id,
+
+                enquiry_id:
+                    enquiry._id,
+
+                status:
+                    schedule.status,
+
+                updatedAt:
+                    schedule.updatedAt
+
             }
+
         });
 
     } catch (err) {
-        next(err);
-    }
-};
 
+        next(err);
+
+    }
+
+};
 
 // get schedule of an enquiry
 

@@ -148,7 +148,7 @@ export const NotificationTemplates = {
     }) {
         return {
             title: "Site Visit Scheduled",
-            message: `A site visit has been scheduled on ${visitDate} at ${address}.`
+            message: `Interested in purchasing the full lot for agricultural development. Please provide matching details. We shall meet on time  ${visitDate} at ${address}.`
         };
     },
 
@@ -159,7 +159,7 @@ export const NotificationTemplates = {
     }) {
         return {
             title: "Site Visit Updated",
-            message: `Your scheduled visit status has been changes from ${oldStatus} to ${newStatus}.`
+            message: `Your scheduled visit has been changes from ${oldStatus} to ${newStatus}.`
         };
     },
 

@@ -50,27 +50,47 @@ const io = new Server(httpserver, {
     }
 });
 
+    const user_online = new Map();
 
 app.set("io", io);
 io.use(verify_socket_token);
 io.on("connection", (socket) => {
-
     console.log(socket.id);
-    message_socket(
+    const userId = socket.user.sub.toString();
+      const role = socket.user.role;
+    if ( !user_online.has(userId)){
+         user_online.set(userId, {
+            role,
+            sockets: new Set()
+        });   
+     };
+
+ user_online
+        .get(userId)
+        .sockets
+        .add(socket.id);    
+        
+        message_socket(
         io,
-        socket
+        socket,
+        user_online
     );
-    notification_socket(io, socket);
+
 
     enquiry_message_socket(
         io,
-        socket
+        socket,
+        user_online
     );
     socket.on("disconnect", () => {
-        console.log(
-            "Socket disconnected:",
-            socket.id
-        );
+        const socket = user_online.get(userId);
+        if ( socket.size === 0 ){
+            user_online.delete(userId);
+            console.log(`User ${userId} is now fully offline`);
+
+        }
+                console.log(`Socket disconnected: ${socket.id}`);
+
     });
 });
 

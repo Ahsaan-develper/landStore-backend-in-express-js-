@@ -167,7 +167,7 @@ export const sub_admin_register = async (req, res, next) => {
         }
 
         const [hashed_password, user_id, user_code] = await Promise.all([
-            bcrypt.hash(password, 8),
+            bcrypt.hash(password, 10),
             Promise.resolve(new mongoose.Types.ObjectId()),
             user_code_generator()
         ]);
@@ -232,10 +232,10 @@ export const get_user_by_admin_profile = async (req, res, next) => {
                     .findOne({ user_id })
                     .select("company_name SSM_reg_number")
                     .lean()
-                : user.role === "keporasi"
+                : user.role === "koperasi"
                     ? keporasiDetailModel
                         .findOne({ user_id })
-                        .select("keporasi_name keporasi_reg_number")
+                        .select("koperasi_name koperasi_reg_number")
                         .lean()
                     : null,
 
@@ -260,7 +260,7 @@ export const get_user_by_admin_profile = async (req, res, next) => {
                 phone_number : user_detail?.phone_number ?? null,
                 IC           : user_detail?.IC ?? null,
                 ...(extra && user.role === "company"  && { company_details: extra }),
-                ...(extra && user.role === "keporasi" && { keporasi_details: extra }),
+                ...(extra && user.role === "koperasi" && { keporasi_details: extra }),
                 ...(admin_detail && { admin_details: admin_detail }),
             }
         });
@@ -275,9 +275,6 @@ export const get_all_users = async (req, res, next) => {
     try {
         const page = Math.max(Number(req.query.page) || 1 , 1 )
         const limit =  Math.max(Number(req.query.limit) ||  10 , 1)
-    
-        const skip = (parseInt(page) - 1) * limit;
-
         const currentPage = Math.max(1, parseInt(page, 10) || 1);
         const safeSkip = (currentPage - 1) * limit;
 
@@ -359,7 +356,7 @@ export const change_user_status_by_admin = async (req, res, next) => {
         const currentAdmin = req.user.role;
         const admin = await adminModel
             .findOne({ user_id })
-            .select("_id role")
+            .select("_id admin_role")
             .lean();
         if (admin && currentAdmin !== "super_admin") {
             throw new ForbiddenError(
@@ -410,7 +407,7 @@ export const change_admin_role_by_super_admin = async ( req , res , next )=>{
         const {role} = req.body ;
         const {admin_id} = req.params;
         const current_admin = req.user.role;
-        const admin = await adminModel.findById(admin_id).select(" role ").lean();
+        const admin = await adminModel.findById(admin_id).select(" admin_role ").lean();
         if ( !admin ) throw new NotFoundError("Admin not found ");
         if ( admin ){
             if ( current_admin !== "super_admin") throw new ForbiddenError(" Only super admin can change roles of other admins ");

@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 const messageSchema = new mongoose.Schema({
   enquiry_id: { type: mongoose.Schema.Types.ObjectId, ref: "Enquiry", default: null },
   sender_id: { type: mongoose.Schema.Types.ObjectId, ref: "User" , default : null },
+  schedule_id: { type: mongoose.Schema.Types.ObjectId, ref: "Schedule" , },
   media_id: [{ type: mongoose.Schema.Types.ObjectId, ref: "Media"  , default : null} ],
   body:{ type : String , default : null},
   is_read: { type : Boolean  , default : null},

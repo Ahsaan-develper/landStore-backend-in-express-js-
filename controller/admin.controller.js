@@ -279,13 +279,11 @@ export const get_all_users = async (req, res, next) => {
 
         const [result] = await usersModel.aggregate([
             { $sort: { createdAt: -1, _id: -1 } },
-
             {
                 $facet: {
                     data: [
                         { $skip: safeSkip },
                         { $limit: limit },
-
                         {
                             $lookup: {
                                 from: "userdetails",
@@ -320,10 +318,8 @@ export const get_all_users = async (req, res, next) => {
                 }
             }
         ]);
-
         const { users, totalCount } = result;
         const totalPages = Math.ceil(totalCount / limit);
-
         return res.status(200).json({
             success: true,
             data: users,
@@ -335,8 +331,7 @@ export const get_all_users = async (req, res, next) => {
                 hasNextPage: currentPage < totalPages,
                 hasPrevPage: currentPage > 1
             }
-        });
-
+        })
     } catch (err) {
         next(err);
     }

@@ -146,7 +146,7 @@ export const get_user_growth_statistics = async (req, res, next) => {
             statistics[0]?.previous || [];
         const currentUsers = {
             individual: 0,
-            koperasi: 0,
+            kopeisk: 0,
             company: 0
         };
         const previousUsers = {

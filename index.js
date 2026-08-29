@@ -19,7 +19,6 @@ import { enquiry_message_socket, message_socket } from "./controller/message.con
 import { verify_socket_token } from "./middleware/jwt.middleware.js";
 import { dashboard_router } from "./routes/dashboard.route.js";
 import { notification_socket } from "./services/notification.service.js";
-
 const app = express();
 
 app.use(express.json())

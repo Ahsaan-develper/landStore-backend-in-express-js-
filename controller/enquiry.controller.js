@@ -616,11 +616,9 @@ export const get_single_enquiry = async (req, res, next) => {
 
                                     profile_image: "$$msg.sender.profile_image"
                                 }
-
                             }
                         }
                     }
-
                 }
             }
         ]);
@@ -664,13 +662,11 @@ export const get_geran_docs_by_enquiry = async (req, res, next) => {
         const geran_urls = media.media_url.filter(
             (_, i) => media.media_type[i] === "document"
         );
-
         return res.status(200).json({
             success: true,
             message: "Geran documents fetched successfully.",
             data: geran_urls,
         });
-
     } catch (err) {
         next(err);
     }
@@ -680,7 +676,6 @@ export const get_geran_docs_by_enquiry = async (req, res, next) => {
 export const get_enquiry_notes = async (req, res, next) => {
     try {
         const { enquiry_id } = req.params;
-
         if (!enquiry_id) {
             throw new BadRequestError("Enquiry ID is required");
         }
@@ -694,13 +689,11 @@ export const get_enquiry_notes = async (req, res, next) => {
             enquiry_id: new mongoose.Types.ObjectId(enquiry_id)
         };
         const [notes, total] = await Promise.all([
-            
                 notesModel.find(filter)
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
                 .lean(),
-
             notesModel.countDocuments(filter)
         ]);
         const totalPages = Math.ceil(total / limit);

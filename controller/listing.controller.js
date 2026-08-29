@@ -199,13 +199,11 @@ export const make_draft_by_user = async (req, res, next) => {
             );
         }
 
-        // Upload property images (outside transaction — no DB lock needed)
         const image_uploads = await upload_files_to_cloudinary(
             property_images,
             "listings/images"
         );
 
-        // Upload geran only if provided (outside transaction)
         let doc_uploads = [];
         if (geran_docs.length > 0) {
             doc_uploads = await upload_files_to_cloudinary(
@@ -214,17 +212,13 @@ export const make_draft_by_user = async (req, res, next) => {
             );
         }
 
-        // Generate listing code outside transaction — no lock needed
         const listing_code = await listing_code_generator();
 
         const deal_types = Array.isArray(dealType) ? dealType : [dealType];
         const tags = Array.isArray(feature_tags) ? feature_tags : [feature_tags];
-        const terrain_list = Array.isArray(terrain) ? terrain : [terrain];
-
-        // ── Start transaction only for DB writes ──────────────────────────
+   
         dbSession.startTransaction();
 
-        // Create location hierarchy (sequential — each depends on prior _id)
         const state_doc = await stateModel.create(
             [{ state: state_name }],
             { session: dbSession }
@@ -246,7 +240,6 @@ export const make_draft_by_user = async (req, res, next) => {
             { session: dbSession }
         );
 
-        // Create all independent documents in parallel
         const [
             media_doc,
             deal_type_doc,
@@ -619,7 +612,6 @@ export const get_listing_by_user = async (req, res, next) => {
         next(err);
     }
 };
-
 
 
 
@@ -1877,33 +1869,169 @@ export const get_all_views_count = async (req, res, next) => {
 };
 
 // make draft published 
-
 export const publish_listing = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const listing = await listingModel.findById(id);
-        if (!listing)
+        const user_id = req.user.sub;
+
+        const listing = await listingModel
+            .findOne({
+                _id: id,
+                user_id
+            })
+            .select(`
+                _id
+                user_id
+                listing_code
+                status
+                location_id
+                state_id
+                tenure_id
+                media_id
+                deal_type_id
+                feature_tags_id
+                terrain_id
+                unit
+                area
+                price_sqft
+                category
+                public_description
+                is_malay_reserve_land
+                relation
+                utilization
+            `)
+            .lean();
+
+        if (!listing) {
             throw new NotFoundError("Listing not found.");
-        if (listing.status !== "draft")
-            throw new BadRequestError("Only draft listings can be pending.");
-        listing.status = "pending";
-        listing.published_at = new Date();
-        await listing.save();
-        // Send notification
-        const { title , message} =NotificationTemplates.listingStatusChanged({
-            listingCode : listing.listing_code,
-            status : "pending"
-        })
-        await createAndSendNotification({
-    user_id: listing.user_id,
-    listing_id: listing._id,
-    notifiable_type: "Listing",
-    title,
-    message
-});
-        return res.status(200).json({
-            message: "Listing pending successfully."
+        }
+
+        if (listing.status !== "draft") {
+            throw new BadRequestError(
+                "Only draft listings can be published."
+            );
+        }
+        const missingFields = [];
+
+        if (!listing.listing_code) {
+            missingFields.push("listing_code");
+        }
+
+        if (!listing.location_id) {
+            missingFields.push("location");
+        }
+
+        if (!listing.state_id) {
+            missingFields.push("state");
+        }
+
+        if (!listing.tenure_id) {
+            missingFields.push("tenure");
+        }
+
+        if (!listing.media_id?.length) {
+            missingFields.push("media");
+        }
+
+        if (!listing.deal_type_id?.length) {
+            missingFields.push("deal type");
+        }
+
+        if (!listing.feature_tags_id?.length) {
+            missingFields.push("feature tags");
+        }
+
+        if (!listing.terrain_id?.length) {
+            missingFields.push("terrain");
+        }
+
+        if (!listing.unit) {
+            missingFields.push("unit");
+        }
+
+        if (
+            listing.area === undefined ||
+            listing.area === null ||
+            Number.isNaN(Number(listing.area)) ||
+            Number(listing.area) <= 0
+        ) {
+            missingFields.push("area");
+        }
+
+        if (
+            listing.price_sqft === undefined ||
+            listing.price_sqft === null ||
+            Number.isNaN(Number(listing.price_sqft)) ||
+            Number(listing.price_sqft) <= 0
+        ) {
+            missingFields.push("price_sqft");
+        }
+
+        if (!listing.category) {
+            missingFields.push("category");
+        }
+
+        if (!listing.public_description?.trim()) {
+            missingFields.push("public_description");
+        }
+
+        if (!listing.relation) {
+            missingFields.push("relation");
+        }
+
+        if (!listing.utilization) {
+            missingFields.push("utilization");
+        }
+
+        if (missingFields.length > 0) {
+            throw new BadRequestError(
+                `Listing is incomplete. Missing: ${missingFields.join(", ")}`
+            );
+        }
+
+        const updated_listing = await listingModel.findOneAndUpdate(
+            {
+                _id: id,
+                user_id,
+                status: "draft"
+            },
+            {
+                $set: {
+                    status: "pending",
+                    published_at: new Date()
+                }
+            },
+            {
+                new: true
+            }
+        ).select("_id listing_code status published_at user_id");
+
+        if (!updated_listing) {
+            throw new BadRequestError(
+                "Listing could not be published."
+            );
+        }
+        const { title, message } =
+            NotificationTemplates.listingStatusChanged({
+                listingCode: updated_listing.listing_code,
+                status: "pending"
+            });
+
+        const io = req.app.get("io");
+
+        await createAndSendNotification(io, {
+            user_id: updated_listing.user_id,
+            listing_id: updated_listing._id,
+            notifiable_type: "Listing",
+            title,
+            message
         });
+
+        return res.status(200).json({
+            success: true,
+            message: "Listing submitted for approval successfully."
+        });
+
     } catch (err) {
         next(err);
     }
@@ -2620,63 +2748,45 @@ export const search_dashboard_listings = async (req, res, next) => {
         if (category) {
             filter.category = category.trim();
         }
-
-
         if (utilization) {
             filter.utilization =
                 utilization.trim();
         }
-
-
         if (relation) {
             filter.relation =
                 relation.trim();
         }
-
-
         if (unit) {
             filter.unit =
                 unit.trim();
         }
-
         if (
             is_malay_reserve_land === "true" ||
             is_malay_reserve_land === "false"
         ) {
-
             filter.is_malay_reserve_land =
                 is_malay_reserve_land === "true";
         }
         if (min_area || max_area) {
-
-            filter.area = {};
-
+         filter.area = {};
             if (min_area) {
-
                 filter.area.$gte =
                     Number(min_area);
             }
-
             if (max_area) {
-
                 filter.area.$lte =
                     Number(max_area);
             }
         }
         if (price_sqft) {
-
             filter.price_sqft = {
                 $lte: Number(price_sqft)
             };
         }
-
-
-        console.log("FINAL FILTER:", filter);
         const [
             listings,
             total
         ] = await Promise.all([
-
             listingModel
                 .find(filter)
                 .sort({
@@ -2685,39 +2795,31 @@ export const search_dashboard_listings = async (req, res, next) => {
                 })
                 .skip(skip)
                 .limit(limit)
-
                 .populate(
                     "state_id",
                     "state"
                 )
-
                 .populate(
                     "deal_type_id",
                     "name"
                 )
-
                 .populate(
                     "terrain_id",
                     "name"
                 )
-
                 .populate(
                     "feature_tags_id",
                     "tag"
                 )
-
                 .populate(
                     "media_id",
                     "media_url"
                 )
-
                 .populate(
                     "location_id",
                     "location"
                 )
-
                 .lean(),
-
             listingModel.countDocuments(filter)
         ]);
         const stateIds = listings
@@ -2726,8 +2828,6 @@ export const search_dashboard_listings = async (req, res, next) => {
                     listing.state_id?._id
             )
             .filter(Boolean);
-
-
         const districts = stateIds.length
             ? await districtModel
                 .find(
@@ -2740,34 +2840,23 @@ export const search_dashboard_listings = async (req, res, next) => {
                 )
                 .lean()
             : [];
-
-
         const district_by_state = {};
-
-
         for (const district of districts) {
-
             district_by_state[
                 String(district.state_id)
             ] = district.district;
         }
         const data = listings.map(
             listing => {
-
                 const coordinates =
                     listing.location_id
                         ?.location
                         ?.coordinates || [];
-
-
                 return {
-
                     listing_id:
                         listing._id,
-
                     listing_code:
                         listing.listing_code,
-
                     status:
                         listing.status,
 

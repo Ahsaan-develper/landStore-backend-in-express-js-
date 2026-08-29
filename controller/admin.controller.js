@@ -298,13 +298,11 @@ export const get_all_users = async (req, res, next) => {
                                 ]
                             }
                         },
-
                         {
                             $addFields: {
                                 user_detail: { $first: "$user_detail" },
                             }
                         },
-
                         {
                             $project: {
                                 password: 0,
@@ -313,11 +311,9 @@ export const get_all_users = async (req, res, next) => {
                             }
                         }
                     ],
-
                     totalCount: [{ $count: "count" }]
                 }
             },
-
             {
                 $project: {
                     users: "$data",
@@ -354,15 +350,16 @@ export const change_user_status_by_admin = async (req, res, next) => {
         const {  status } = req.body;
         const { user_id } = req.params ;
         const currentAdmin = req.user.role;
+        if (  currentAdmin !== "super_admin" || currentAdmin !== "user_admin") {
+            throw new ForbiddenError(
+                "Only super admin and user admin can change another user status."
+            );
+        }
         const admin = await adminModel
             .findOne({ user_id })
             .select("_id admin_role")
             .lean();
-        if (admin && currentAdmin !== "super_admin") {
-            throw new ForbiddenError(
-                "Only super admin can change another admin's status."
-            );
-        }
+
         const user = await usersModel.findByIdAndUpdate(
             new mongoose.Types.ObjectId(user_id),
             { $set: { status } },
@@ -407,11 +404,13 @@ export const change_admin_role_by_super_admin = async ( req , res , next )=>{
         const {role} = req.body ;
         const {admin_id} = req.params;
         const current_admin = req.user.role;
+        if ( current_admin !== "super_admin") throw new ForbiddenError(" Only super admin can change roles of other admins ");
         const admin = await adminModel.findById(admin_id).select(" admin_role ").lean();
         if ( !admin ) throw new NotFoundError("Admin not found ");
-        if ( admin ){
-            if ( current_admin !== "super_admin") throw new ForbiddenError(" Only super admin can change roles of other admins ");
-        }
+        
+
+        if ( admin.admin_role === "super_admin") throw new ForbiddenError(" Super admin role cannot change ")
+
         const updated_admin =await adminModel.findByIdAndUpdate(admin_id , { $set : { admin_role : role }} , { new : true});
         res.status(200).json({
             message : "Admin role is changed",

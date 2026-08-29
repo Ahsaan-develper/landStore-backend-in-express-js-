@@ -82,7 +82,7 @@ export const get_user_growth_statistics = async (req, res, next) => {
                         role: {
                             $in: [
                                 "individual",
-                                "keporasi",
+                                "koperasi",
                                 "company"
                             ]
                         },
@@ -146,12 +146,12 @@ export const get_user_growth_statistics = async (req, res, next) => {
             statistics[0]?.previous || [];
         const currentUsers = {
             individual: 0,
-            keporasi: 0,
+            koperasi: 0,
             company: 0
         };
         const previousUsers = {
             individual: 0,
-            keporasi: 0,
+            koperasi: 0,
             company: 0
         };
         current.forEach(item => {
@@ -198,19 +198,19 @@ export const get_user_growth_statistics = async (req, res, next) => {
                     )
 
             },
-            keporasi: {
+            koperasi: {
 
                 current:
-                    currentUsers.keporasi,
+                    currentUsers.koperasi,
 
                 previous:
-                    previousUsers.keporasi,
+                    previousUsers.koperasi,
 
                 growth:
                     Number(
                         calculateGrowth(
-                            currentUsers.keporasi,
-                            previousUsers.keporasi
+                            currentUsers.koperasi,
+                            previousUsers.koperasi
                         )
                     )
             },
@@ -230,11 +230,11 @@ export const get_user_growth_statistics = async (req, res, next) => {
         };
         const currentTotal =
             currentUsers.individual +
-            currentUsers.keporasi +
+            currentUsers.koperasi +
             currentUsers.company;
         const previousTotal =
             previousUsers.individual +
-            previousUsers.keporasi +
+            previousUsers.koperasi +
             previousUsers.company;
         const totalGrowth =
             Number(
@@ -527,14 +527,14 @@ export const get_single_user_statistics = async (req, res, next) => {
 
         const allowedRoles = [
             "individual",
-            "keporasi",
+            "koperasi",
             "company"
         ];
 
         if (!allowedRoles.includes(role)) {
             return res.status(400).json({
                 message:
-                    "Invalid role. Use individual, keporasi or company."
+                    "Invalid role. Use individual, koperasi or company."
             });
         }
 
@@ -563,23 +563,12 @@ export const get_single_user_statistics = async (req, res, next) => {
                 {
                     $facet: {
 
-                        /*
-                        |--------------------------------------------------------------------------
-                        | ALL TIME USERS
-                        |--------------------------------------------------------------------------
-                        */
-
                         allTime: [
                             {
                                 $count: "total"
                             }
                         ],
 
-                        /*
-                        |--------------------------------------------------------------------------
-                        | USERS FROM PREVIOUS 12 MONTHS
-                        |--------------------------------------------------------------------------
-                        */
 
                         previous12Months: [
                             {
@@ -605,13 +594,6 @@ export const get_single_user_statistics = async (req, res, next) => {
 
             const previous12Months =
                 statistics[0]?.previous12Months[0]?.total || 0;
-
-            /*
-            |--------------------------------------------------------------------------
-            | Growth
-            |--------------------------------------------------------------------------
-            */
-
             let growth = 0;
 
             if (previous12Months === 0) {
@@ -649,12 +631,6 @@ export const get_single_user_statistics = async (req, res, next) => {
             });
 
         }
-
-        /*
-        |--------------------------------------------------------------------------
-        | PERIOD FILTER
-        |--------------------------------------------------------------------------
-        */
 
         const now = new Date();
 
@@ -743,12 +719,6 @@ export const get_single_user_statistics = async (req, res, next) => {
 
         }
 
-        /*
-        |--------------------------------------------------------------------------
-        | AGGREGATION
-        |--------------------------------------------------------------------------
-        */
-
         const statistics = await usersModel.aggregate([
 
             {
@@ -764,12 +734,6 @@ export const get_single_user_statistics = async (req, res, next) => {
 
             {
                 $facet: {
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | CURRENT PERIOD
-                    |--------------------------------------------------------------------------
-                    */
 
                     current: [
 
@@ -787,12 +751,6 @@ export const get_single_user_statistics = async (req, res, next) => {
                         }
 
                     ],
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | PREVIOUS PERIOD
-                    |--------------------------------------------------------------------------
-                    */
 
                     previous: [
 
@@ -822,12 +780,6 @@ export const get_single_user_statistics = async (req, res, next) => {
         const previous =
             statistics[0]?.previous[0]?.total || 0;
 
-        /*
-        |--------------------------------------------------------------------------
-        | GROWTH CALCULATION
-        |--------------------------------------------------------------------------
-        */
-
         let growth = 0;
 
         if (previous === 0) {
@@ -846,13 +798,6 @@ export const get_single_user_statistics = async (req, res, next) => {
             ).toFixed(2);
 
         }
-
-        /*
-        |--------------------------------------------------------------------------
-        | RESPONSE
-        |--------------------------------------------------------------------------
-        */
-
         return res.status(200).json({
 
             message:

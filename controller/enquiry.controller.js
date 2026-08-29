@@ -623,60 +623,44 @@ export const get_single_enquiry = async (req, res, next) => {
 
                 }
             }
-
         ]);
-
         if (!enquiry.length) {
             throw new NotFoundError("Enquiry not found.");
         }
-
         return res.status(200).json({
             message: "Enquiry fetched successfully.",
             enquiry: enquiry[0]
         });
-
     } catch (err) {
         next(err);
     }
 };
 
 // get geran docs 
-
 export const get_geran_docs_by_enquiry = async (req, res, next) => {
     try {
         const { enquiry_id } = req.params;
-
-        // Get enquiry → listing_id
         const enquiry = await enquiryModel
             .findById(enquiry_id, { listing_id: 1 })
             .lean();
-
         if (!enquiry) {
             throw new NotFoundError("Enquiry not found.");
         }
-
-        // Get listing → media_id
         const listing = await listingModel
             .findById(enquiry.listing_id, { media_id: 1 })
             .lean();
-
         if (!listing) {
             throw new NotFoundError("Listing not found.");
         }
-
-        // Get only geran URLs from media
         const media = await mediaModel
             .findOne(
                 { _id: { $in: listing.media_id } },
                 { media_url: 1, media_type: 1 }
             )
             .lean();
-
         if (!media) {
             throw new NotFoundError("Media not found.");
         }
-
-        // Filter only geran docs by index
         const geran_urls = media.media_url.filter(
             (_, i) => media.media_type[i] === "document"
         );
@@ -700,19 +684,15 @@ export const get_enquiry_notes = async (req, res, next) => {
         if (!enquiry_id) {
             throw new BadRequestError("Enquiry ID is required");
         }
-
         if (!mongoose.Types.ObjectId.isValid(enquiry_id)) {
             throw new BadRequestError("Invalid enquiry ID");
         }
-
         const page = Math.max(Number(req.query.page) || 1, 1);
         const limit = Math.max(Number(req.query.limit) || 10, 1);
         const skip = (page - 1) * limit;
-
         const filter = {
             enquiry_id: new mongoose.Types.ObjectId(enquiry_id)
         };
-
         const [notes, total] = await Promise.all([
             
                 notesModel.find(filter)
@@ -723,9 +703,7 @@ export const get_enquiry_notes = async (req, res, next) => {
 
             notesModel.countDocuments(filter)
         ]);
-
         const totalPages = Math.ceil(total / limit);
-
         return res.status(200).json({
             status: "success",
             data: {
@@ -737,7 +715,6 @@ export const get_enquiry_notes = async (req, res, next) => {
                 notes
             }
         });
-
     } catch (err) {
         next(err);
     }

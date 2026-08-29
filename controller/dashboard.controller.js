@@ -653,7 +653,6 @@ export const get_single_user_statistics = async (req, res, next) => {
             previousStart.setHours(
                 previousStart.getHours() - 24
             );
-
         }
 
         else if (period === "7_days") {

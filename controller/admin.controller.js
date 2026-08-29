@@ -238,7 +238,6 @@ export const get_user_by_admin_profile = async (req, res, next) => {
                         .select("koperasi_name koperasi_reg_number")
                         .lean()
                     : null,
-
             is_admin
                 ? adminModel
                     .findOne({ user_id })

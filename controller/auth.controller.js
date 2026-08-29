@@ -133,25 +133,34 @@ export const user_register = async (req, res, next) => {
             }
         });
     } catch (err) {
-        if (session.inTransaction()) {
-            await session.abortTransaction();
-        }
-    if (err.code === 11000) {
+       if (err.code === 11000) {
+
         if (err.keyPattern?.IC) {
-            throw new ConflictError("This IC already exists");
+            return next(new ConflictError("This IC already exists"));
         }
+
         if (err.keyPattern?.phone_number) {
-            throw new ConflictError("This phone number already exists");
+            return next(
+                new ConflictError("This phone number already exists")
+            );
         }
+
         if (err.keyPattern?.email) {
-            throw new ConflictError("This email already exists");
+            return next(
+                new ConflictError("This email already exists")
+            );
         }
-        throw new ConflictError("Duplicate value already exists");
+
+        return next(
+            new ConflictError("Duplicate value already exists")
+        );
     }
-        next(err);
-    } finally {
-        await session.endSession();
-    }
+
+    return next(err);
+
+} finally {
+    await session.endSession();
+}
 };
 
 
@@ -266,22 +275,35 @@ export const keporasi_register = async (req, res, next) => {
         });
 
     } catch (err) {
-        if (err.code === 11000) {
+
+    if (err.code === 11000) {
+
         if (err.keyPattern?.IC) {
-            throw new ConflictError("This IC already exists");
+            return next(new ConflictError("This IC already exists"));
         }
+
         if (err.keyPattern?.phone_number) {
-            throw new ConflictError("This phone number already exists");
+            return next(
+                new ConflictError("This phone number already exists")
+            );
         }
+
         if (err.keyPattern?.email) {
-            throw new ConflictError("This email already exists");
+            return next(
+                new ConflictError("This email already exists")
+            );
         }
-        throw new ConflictError("Duplicate value already exists");
+
+        return next(
+            new ConflictError("Duplicate value already exists")
+        );
     }
-        next(err);
-    } finally {
-        await session.endSession();
-    }
+
+    return next(err);
+
+} finally {
+    await session.endSession();
+}
 };
 
 // company register 
@@ -388,25 +410,34 @@ export const company_register = async (req, res, next) => {
             }
         });
     } catch (err) {
-        if (session.inTransaction()) {
-            await session.abortTransaction();
-        }
-        if (err.code === 11000) {
+       if (err.code === 11000) {
+
         if (err.keyPattern?.IC) {
-            throw new ConflictError("This IC already exists");
+            return next(new ConflictError("This IC already exists"));
         }
+
         if (err.keyPattern?.phone_number) {
-            throw new ConflictError("This phone number already exists");
+            return next(
+                new ConflictError("This phone number already exists")
+            );
         }
+
         if (err.keyPattern?.email) {
-            throw new ConflictError("This email already exists");
+            return next(
+                new ConflictError("This email already exists")
+            );
         }
-        throw new ConflictError("Duplicate value already exists");
+
+        return next(
+            new ConflictError("Duplicate value already exists")
+        );
     }
-        next(err);
-    } finally {
-        await session.endSession();
-    }
+
+    return next(err);
+
+} finally {
+    await session.endSession();
+}
 };// login a user 
 export const user_login = async (req, res, next) => {
     try {

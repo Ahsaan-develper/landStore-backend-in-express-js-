@@ -63,8 +63,6 @@ export const add_listing_to_folder = async (req, res, next) => {
 
         const { folder_id, listing_id } = req.body;
         const user_id = req.user.sub;
-
-        // Verify folder belongs to current user
         const folder = await folderModel.findOne({
             _id: folder_id,
             user_id
@@ -74,14 +72,12 @@ export const add_listing_to_folder = async (req, res, next) => {
             throw new NotFoundError("Folder not found.");
         }
 
-        // Verify listing exists
         const listing = await listingModel.findById(listing_id);
 
         if (!listing) {
             throw new NotFoundError("Listing not found.");
         }
 
-        // Check if already added
         const alreadyExists = await folderListingModel.findOne({
             folder_id,
             listing_id

@@ -1,4 +1,3 @@
-import { io } from "socket.io-client";
 import dealTypeModel from "../models/dealType.model.js";
 import enquiryModel from "../models/enquiry.model.js";
 import listingModel from "../models/listing.model.js";
@@ -95,11 +94,10 @@ export const get_all_enquiry = async (req, res, next) => {
         const user_id = req.user.sub;
 
         const result = await enquiryModel.aggregate([
-
             {
                 $match: {
                     user_id: new mongoose.Types.ObjectId(user_id),
-                    status : { $ne : "cancel"}
+                    // status : { $ne : "cancel"}
                 }
             },
             {
@@ -228,12 +226,11 @@ export const get_all_enquiry = async (req, res, next) => {
         next(err);
     }
 };
+
+
 // all enquiry by admin 
-
-
 export const get_all_enquiry_by_admin = async (req, res, next) => {
     try {
-
         const  page   = Math.max(Number(req.query.page) || 1 , 1);
 
         const limit = Math.max(Number(req.query.limit) || 10 , 1);

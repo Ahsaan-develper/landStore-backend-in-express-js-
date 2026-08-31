@@ -99,8 +99,8 @@ export const get_enquiry_messages = async (req, res, next) => {
 
         const {
             enquiry_id,
-            before_id
-        } = req.query;
+        } = req.params;
+        const {   before_id } = req.query;
         if (!enquiry_id) {
             throw new BadRequestError(
                 "Enquiry ID is required."
@@ -142,7 +142,6 @@ export const get_enquiry_messages = async (req, res, next) => {
                 "Enquiry not found."
             );
         }
-
 
         const isAdmin =
             role === "super_admin" ||
@@ -788,9 +787,6 @@ export const enquiry_message_socket = (io, socket) => {
             const role =
                 socket.user.role;
 
-            console.log(user_id , "user_id") ;
-            console.log(role , "role") ;
-            
             const is_admin =
                 role === "super_admin" ||
                 role === "enquiry_admin";

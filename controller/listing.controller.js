@@ -2960,13 +2960,10 @@ export const search_dashboard_listings = async (req, res, next) => {
                             ?.flatMap(
                                 tag => tag.tag
                             ) ?? [],
-
-                    // First image only
                     image:
                         listing.media_id?.[0]
                             ?.media_url?.[0]
                             ?? null,
-
                     location: {
 
                         longitude:
@@ -2980,11 +2977,8 @@ export const search_dashboard_listings = async (req, res, next) => {
                 };
             }
         );
-
         const totalPages =
-            Math.ceil(total / limit);
-
-
+        Math.ceil(total / limit);
         return res.status(200).json({
 
             success: true,
@@ -3014,10 +3008,7 @@ export const search_dashboard_listings = async (req, res, next) => {
                     page > 1
             }
         });
-
-
     } catch (err) {
-
         next(err);
     }
 };

@@ -3923,7 +3923,6 @@ export const get_all_sections = async (req, res, next) => {
                 }
             },
 
-            // at most one container per section (unique index), so nest it as an object
             {
                 $lookup: {
                     from: "containerstyles",

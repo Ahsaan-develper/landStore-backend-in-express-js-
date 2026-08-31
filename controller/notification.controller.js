@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import userNotificationModel from "../models/userNotificationModel.js";
 import { NotFoundError } from "../utils/error.utils.js";
 import { get_enquiry_details, get_listing_details } from "../utils/dbhelper.utils.js";
+import notificationModel from "../models/notification.model.js";
 
 
 export const get_all_notifications = async (req, res, next) => {
@@ -209,7 +210,7 @@ export const get_notification_data = async (req, res, next) => {
 
                 if (notification.schedule_id) {
 
-                    resource = await get_schedule_details(
+                    resource = await notificationModel(
                         notification.schedule_id
                     );
 
@@ -229,14 +230,9 @@ export const get_notification_data = async (req, res, next) => {
                     "Invalid notification type."
                 );
         }
-
-
         return res.status(200).json({
-
             success: true,
-
             message: "Notification data retrieved successfully.",
-
             data: {
 
                 notification: {

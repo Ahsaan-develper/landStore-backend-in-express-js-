@@ -9,4 +9,7 @@ const notificationSchema = new mongoose.Schema({
   message: { type : String , required : true},
 }, { timestamps: true });
 
+notificationSchema.index({  enquiry_id : 1 })
+notificationSchema.index({ listing_id : 1 })
+notificationSchema.index({ schedule_id : 1 })
 export default mongoose.model("Notification", notificationSchema);

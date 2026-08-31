@@ -407,45 +407,45 @@ export const get_enquiry_details = async (enquiry_id) => {
                     ]
                 },
 
-                messages: {
-                    $map: {
-                        input: "$messages",
-                        as: "msg",
+                // messages: {
+                //     $map: {
+                //         input: "$messages",
+                //         as: "msg",
 
-                        in: {
+                //         in: {
 
-                            message_id: "$$msg._id",
+                //             message_id: "$$msg._id",
 
-                            message: "$$msg.body",
+                //             message: "$$msg.body",
 
-                            createdAt: "$$msg.createdAt",
+                //             createdAt: "$$msg.createdAt",
 
-                            updatedAt: "$$msg.updatedAt",
+                //             updatedAt: "$$msg.updatedAt",
 
-                            sender: {
-                                $arrayElemAt: [
-                                    {
-                                        $filter: {
+                //             sender: {
+                //                 $arrayElemAt: [
+                //                     {
+                //                         $filter: {
 
-                                            input: "$senders",
+                //                             input: "$senders",
 
-                                            as: "user",
+                //                             as: "user",
 
-                                            cond: {
-                                                $eq: [
-                                                    "$$user._id",
-                                                    "$$msg.sender_id"
-                                                ]
-                                            }
+                //                             cond: {
+                //                                 $eq: [
+                //                                     "$$user._id",
+                //                                     "$$msg.sender_id"
+                //                                 ]
+                //                             }
 
-                                        }
-                                    },
-                                    0
-                                ]
-                            }
-                        }
-                    }
-                }
+                //                         }
+                //                     },
+                //                     0
+                //                 ]
+                //             }
+                //         }
+                //     }
+                // }
             }
         },
 
@@ -492,37 +492,37 @@ export const get_enquiry_details = async (enquiry_id) => {
                     thumbnail: "$thumbnail"
                 },
 
-                messages: {
-                    $map: {
+                // messages: {
+                //     $map: {
 
-                        input: "$messages",
+                //         input: "$messages",
 
-                        as: "msg",
+                //         as: "msg",
 
-                        in: {
+                //         in: {
 
-                            message_id: "$$msg.message_id",
+                //             message_id: "$$msg.message_id",
 
-                            message: "$$msg.message",
+                //             message: "$$msg.message",
 
-                            createdAt: "$$msg.createdAt",
+                //             createdAt: "$$msg.createdAt",
 
-                            updatedAt: "$$msg.updatedAt",
+                //             updatedAt: "$$msg.updatedAt",
 
-                            sender: {
+                //             sender: {
 
-                                user_id: "$$msg.sender._id",
+                //                 user_id: "$$msg.sender._id",
 
-                                fullname: "$$msg.sender.fullname",
+                //                 fullname: "$$msg.sender.fullname",
 
-                                email: "$$msg.sender.email",
+                //                 email: "$$msg.sender.email",
 
-                                profile_image:
-                                    "$$msg.sender.profile_image"
-                            }
-                        }
-                    }
-                }
+                //                 profile_image:
+                //                     "$$msg.sender.profile_image"
+                //             }
+                //         }
+                //     }
+                // }
             }
         }
     ]);

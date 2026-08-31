@@ -371,7 +371,6 @@ export const get_enquiry_schedule = async (req, res, next) => {
         }
 
         return res.status(200).json({
-            enquiry_id,
             totalSchedules: schedules.length,
             schedules
         });
@@ -414,8 +413,14 @@ export const get_all_schedules = async ( req , res , next )=>{
                 $sort: {
                     visit_date: -1
                 }
+            },
+            {
+                $skip :skip
+            },
+            {
+                $limit : limit
             }
-
+        
         ]);
 
         if (!schedules.length) {

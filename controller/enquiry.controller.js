@@ -10,6 +10,7 @@ import { BadRequestError, ConflictError, NotFoundError } from "../utils/error.ut
 import { enquiry_code_generator } from "../utils/unique_code_generator.utils.js";
 import mongoose from "mongoose";
 import notesModel from "../models/notes.model.js";
+import { get_enquiry_details } from "../utils/dbhelper.utils.js";
 // create an enquiry 
 export const create_enquiry = async (req, res, next) => {
     try {
@@ -395,240 +396,22 @@ export const change_enquiry_status = async (req, res, next) => {
 };
 
 export const get_single_enquiry = async (req, res, next) => {
+
     try {
 
         const { enquiry_id } = req.params;
 
-        const enquiry = await enquiryModel.aggregate([
+        const enquiry = await get_enquiry_details(enquiry_id);
 
-            {
-                $match: {
-                    _id: new mongoose.Types.ObjectId(enquiry_id),
-                }
-            },
-
-            // Listing
-            {
-                $lookup: {
-                    from: "listings",
-                    localField: "listing_id",
-                    foreignField: "_id",
-                    as: "listing"
-                }
-            },
-            { $unwind: "$listing" },
-
-            // State
-            {
-                $lookup: {
-                    from: "states",
-                    localField: "listing.state_id",
-                    foreignField: "_id",
-                    as: "state"
-                }
-            },
-            {
-                $unwind: {
-                    path: "$state",
-                    preserveNullAndEmptyArrays: true
-                }
-            },
-
-            // District
-            {
-                $lookup: {
-                    from: "districts",
-                    localField: "listing.state_id",
-                    foreignField: "state_id",
-                    as: "district"
-                }
-            },
-            {
-                $unwind: {
-                    path: "$district",
-                    preserveNullAndEmptyArrays: true
-                }
-            },
-
-            // Deal Type
-            {
-                $lookup: {
-                    from: "dealtypes",
-                    localField: "listing.deal_type_id",
-                    foreignField: "_id",
-                    as: "deal_type"
-                }
-            },
-
-            // Media
-            {
-                $lookup: {
-                    from: "media",
-                    localField: "listing.media_id",
-                    foreignField: "_id",
-                    as: "media"
-                }
-            },
-
-            // Messages
-            {
-                $lookup: {
-                    from: "messages",
-                    localField: "_id",
-                    foreignField: "enquiry_id",
-                    as: "messages"
-                }
-            },
-
-            // Users
-            {
-                $lookup: {
-                    from: "users",
-                    localField: "messages.sender_id",
-                    foreignField: "_id",
-                    as: "senders"
-                }
-            },
-
-            {
-                $addFields: {
-
-                    total_price: {
-                        $cond: [
-                            { $eq: ["$listing.unit", "acres"] },
-                            {
-                                $multiply: [
-                                    "$listing.area",
-                                    43560,
-                                    "$listing.price_sqft"
-                                ]
-                            },
-                            {
-                                $multiply: [
-                                    "$listing.area",
-                                    "$listing.price_sqft"
-                                ]
-                            }
-                        ]
-                    },
-
-                    thumbnail: {
-                        $arrayElemAt: [
-                            {
-                                $arrayElemAt: [
-                                    "$media.media_url",
-                                    0
-                                ]
-                            },
-                            0
-                        ]
-                    },
-
-                    messages: {
-                        $map: {
-                            input: "$messages",
-                            as: "msg",
-                            in: {
-                                message_id: "$$msg._id",
-                                message: "$$msg.body",
-                                createdAt: "$$msg.createdAt",
-                                updatedAt: "$$msg.updatedAt",
-                                sender: {
-                                    $arrayElemAt: [
-                                        {
-                                            $filter: {
-                                                input: "$senders",
-                                                as: "user",
-                                                cond: {
-                                                    $eq: [
-                                                        "$$user._id",
-                                                        "$$msg.sender_id"
-                                                    ]
-                                                }
-                                            }
-                                        },
-                                        0
-                                    ]
-                                }
-                            }
-                        }
-                    }
-
-                }
-            },
-
-            {
-                $project: {
-
-                    _id: 0,
-
-                    enquiry_id: "$_id",
-                    enquiry_code: 1,
-                    status: 1,
-                    createdAt: 1,
-                    updatedAt: 1,
-
-                    listing: {
-
-                        listing_id: "$listing._id",
-                        listing_code: "$listing.listing_code",
-
-                        category: "$listing.category",
-                        unit: "$listing.unit",
-                        area: "$listing.area",
-
-                        price_sqft: "$listing.price_sqft",
-
-                        total_price: "$total_price",
-
-                        utilization: "$listing.utilization",
-
-                        state: "$state.state",
-
-                        district: "$district.district",
-
-                        deal_type: "$deal_type.name",
-
-                        thumbnail: "$thumbnail"
-                    },
-
-                    messages: {
-                        $map: {
-                            input: "$messages",
-                            as: "msg",
-                            in: {
-
-                                message_id: "$$msg.message_id",
-
-                                message: "$$msg.message",
-
-                                createdAt: "$$msg.createdAt",
-
-                                updatedAt: "$$msg.updatedAt",
-
-                                sender: {
-
-                                    user_id: "$$msg.sender._id",
-
-                                    fullname: "$$msg.sender.fullname",
-
-                                    email: "$$msg.sender.email",
-
-                                    profile_image: "$$msg.sender.profile_image"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        ]);
-        if (!enquiry.length) {
+        if (!enquiry) {
             throw new NotFoundError("Enquiry not found.");
         }
+
         return res.status(200).json({
             message: "Enquiry fetched successfully.",
-            enquiry: enquiry[0]
+            enquiry
         });
+
     } catch (err) {
         next(err);
     }

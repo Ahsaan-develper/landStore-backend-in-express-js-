@@ -39,15 +39,34 @@ export const createAndSendNotification = async (
             { session }
         );
         await session.commitTransaction();
+        
         if (io) {
-            io.to(`user:${user_id}`).emit("newNotification", {
-                user_notification_id: userNotification._id,
-                title,
-                message,
-                notifiable_type,
-                is_read: false,
-                createdAt: userNotification.createdAt
-            });
+            const room = `user:${user_id}`;
+            const socket = io.sockets.adapter.rooms.get(room);
+            if ( socket && socket.size > 0 ) {
+                 io.to(room).emit(
+                    "newNotification",
+                    {
+                        user_notification_id:
+                            userNotification._id,
+
+                        title,
+
+                        message,
+
+                        notifiable_type,
+
+                        is_read: false,
+
+                        createdAt:
+                            userNotification.createdAt
+                    }
+                );
+            }else {
+                console.log(
+                    `User ${user_id} is offline. Notification saved only.`
+                );
+            }
         }
         return {
             notification,

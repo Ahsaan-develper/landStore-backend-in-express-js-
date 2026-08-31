@@ -3,6 +3,7 @@
 import mongoose from "mongoose";
 import userNotificationModel from "../models/userNotificationModel.js";
 import { NotFoundError } from "../utils/error.utils.js";
+import { get_enquiry_details, get_listing_details } from "../utils/dbhelper.utils.js";
 
 
 export const get_all_notifications = async (req, res, next) => {
@@ -123,6 +124,148 @@ export const get_all_notifications = async (req, res, next) => {
     } catch (err) {
 
         next(err);
+
+    }
+};
+
+// get notification data 
+export const get_notification_data = async (req, res, next) => {
+
+    try {
+
+        const { notification_id } = req.params;
+
+        const user_id = req.user.sub;
+
+        const userNotification = await userNotificationModel
+            .findOne({
+                _id: notification_id,
+                user_id
+            })
+            .populate("notification_id").lean();
+
+
+        if (!userNotification) {
+            throw new NotFoundError("Notification not found.");
+        }
+
+
+        const notification = userNotification.notification_id;
+
+
+        if (!notification) {
+            throw new NotFoundError("Notification data not found.");
+        }
+
+
+        // Mark as read
+        if (!userNotification.is_read) {
+
+            await userNotificationModel.updateOne(
+                { _id: userNotification._id },
+                {
+                    $set: {
+                        is_read: true,
+                        read_at: new Date()
+                    }
+                }
+            );
+
+            userNotification.is_read = true;
+            userNotification.read_at = new Date();
+        }
+
+
+        let resource = null;
+
+
+        switch (notification.notifiable_type) {
+
+            case "Listing": {
+
+                if (notification.listing_id) {
+
+                    resource = await get_listing_details(
+                        notification.listing_id
+                    );
+
+                }
+                break;
+            }
+
+            case "Enquiry": {
+
+                if (notification.enquiry_id) {
+
+                    resource = await get_enquiry_details(
+                        notification.enquiry_id
+                    );
+
+                }
+                break;
+            }
+
+            case "Schedule": {
+
+                if (notification.schedule_id) {
+
+                    resource = await get_schedule_details(
+                        notification.schedule_id
+                    );
+
+                }
+                break;
+            }
+            case "Account": {
+
+                resource = null;
+
+                break;
+            }
+
+
+            default:
+                throw new BadRequestError(
+                    "Invalid notification type."
+                );
+        }
+
+
+        return res.status(200).json({
+
+            success: true,
+
+            message: "Notification data retrieved successfully.",
+
+            data: {
+
+                notification: {
+
+                    _id: notification._id,
+
+                    title: notification.title,
+
+                    message: notification.message,
+
+                    notifiable_type:
+                        notification.notifiable_type,
+
+                    createdAt: notification.createdAt
+                },
+
+                is_read: userNotification.is_read,
+
+                read_at: userNotification.read_at,
+
+                resource
+
+            }
+        });
+
+
+    } catch (error) {
+
+        next(error);
 
     }
 };

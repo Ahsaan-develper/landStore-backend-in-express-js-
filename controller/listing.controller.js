@@ -17,53 +17,121 @@ import { NotificationTemplates } from "../template/notification.template.js";
 import { createAndSendNotification } from "../services/notification.service.js";
 import enquiryModel from "../models/enquiry.model.js";
 import notesModel from "../models/notes.model.js";
-
+import { get_listing_details } from "../utils/dbhelper.utils.js";
 
 export const create_listing = async (req, res, next) => {
+    const dbSession = await mongoose.startSession();
+
     try {
+        dbSession.startTransaction();
+
         const {
-            unit, area, public_description, price_sqft,
-            is_malay_reserve_land, tenure_type, start_date,
-            end_year, dealType, category,
-            state_name, longitude, latitude,
-            district_name, sub_district_name, session,
-            feature_tags, terrain, relation, utilization,
+            unit,
+            area,
+            public_description,
+            price_sqft,
+            is_malay_reserve_land,
+            tenure_type,
+            start_date,
+            end_year,
+            dealType,
+            category,
+            state_name,
+            longitude,
+            latitude,
+            district_name,
+            sub_district_name,
+            session,
+            feature_tags,
+            terrain,
+            relation,
+            utilization,
         } = req.body;
 
-        const user_id         = req.user.sub;
-        console.log("user od " , user_id);
-        
-        const property_images = req.files?.property_images || [];
-        const geran_docs      = req.files?.geran_doc       || [];
+        const user_id = req.user.sub;
 
-        if (property_images.length < 3) throw new BadRequestError("At least three property images are required");
-        if (geran_docs.length < 1)      throw new BadRequestError("Geran document is required");
+        const property_images =
+            req.files?.property_images || [];
 
-      const [image_uploads, doc_uploads] = await Promise.all([
-    upload_files_to_cloudinary(property_images, "listings/images"),
-    upload_files_to_cloudinary(geran_docs, "listings/geran/documents"),
-]);
+        const geran_docs =
+            req.files?.geran_doc || [];
 
-   
-        const state_doc = await stateModel.create({ state: state_name });
+        if (property_images.length < 3) {
+            throw new BadRequestError(
+                "At least three property images are required"
+            );
+        }
 
-        const district_doc = await districtModel.create({
-            state_id : state_doc._id,
-            district : district_name,
-        });
+        if (geran_docs.length < 1) {
+            throw new BadRequestError(
+                "Geran document is required"
+            );
+        }
+        const [
+            image_uploads,
+            doc_uploads
+        ] = await Promise.all([
+            upload_files_to_cloudinary(
+                property_images,
+                "listings/images"
+            ),
 
-        const sub_district_doc = await subDistrictModel.create({
-            district_id : district_doc._id,
-            sub_district: sub_district_name,
-            session,
-        });
+            upload_files_to_cloudinary(
+                geran_docs,
+                "listings/geran/documents"
+            )
+        ]);
+
+        const state_doc =
+            await stateModel.create(
+                [{
+                    state: state_name
+                }],
+                {
+                    session: dbSession
+                }
+            );
+
+        const district_doc =
+            await districtModel.create(
+                [{
+                    state_id: state_doc[0]._id,
+                    district: district_name
+                }],
+                {
+                    session: dbSession
+                }
+            );
 
 
-        const deal_types   = Array.isArray(dealType)     ? dealType     : [dealType];
-        const tags         = Array.isArray(feature_tags) ? feature_tags : [feature_tags];
-        const terrain_list = Array.isArray(terrain)      ? terrain      : [terrain];
+        const sub_district_doc =
+            await subDistrictModel.create(
+                [{
+                    district_id: district_doc[0]._id,
+                    sub_district: sub_district_name,
+                    session
+                }],
+                {
+                    session: dbSession
+                }
+            );
 
-   
+
+        const deal_types =
+            Array.isArray(dealType)
+                ? dealType
+                : [dealType];
+
+        const tags =
+            Array.isArray(feature_tags)
+                ? feature_tags
+                : [feature_tags];
+
+        const terrain_list =
+            Array.isArray(terrain)
+                ? terrain
+                : [terrain];
+
         const [
             media_doc,
             deal_type_doc,
@@ -71,89 +139,251 @@ export const create_listing = async (req, res, next) => {
             terrain_doc,
             location_doc,
             leasehold_doc,
-            listing_code,
+            listing_code
         ] = await Promise.all([
-            mediaModel.create({
-                media_url  : [
-                    ...image_uploads.map(r => r.url),
-                    ...doc_uploads.map(r => r.url),
-                ],
-                public_id  : [
-                    ...image_uploads.map(r => r.public_id),
-                    ...doc_uploads.map(r => r.public_id),
-                ],
-                media_type : [
-                    ...image_uploads.map(() => "image"),
-                    ...doc_uploads.map(() => "document"),
-                ],
-                media_name : [
-                    ...property_images.map(f => f.originalname),
-                    ...geran_docs.map(f => f.originalname),
-                ],
-            }),
-            dealTypeModel.create({ name: deal_types }),
-            featureTagModel.create({ tag: tags }),
-            terrainTypeModel.create({ name: terrain_list }),
-            locationModel.create({
-                location: {
-                    type        : "Point",
-                    coordinates : [parseFloat(longitude), parseFloat(latitude)],
+
+            mediaModel.create(
+                [{
+                    media_url: [
+                        ...image_uploads.map(
+                            r => r.url
+                        ),
+                        ...doc_uploads.map(
+                            r => r.url
+                        )
+                    ],
+
+                    public_id: [
+                        ...image_uploads.map(
+                            r => r.public_id
+                        ),
+                        ...doc_uploads.map(
+                            r => r.public_id
+                        )
+                    ],
+
+                    media_type: [
+                        ...image_uploads.map(
+                            () => "image"
+                        ),
+                        ...doc_uploads.map(
+                            () => "document"
+                        )
+                    ],
+
+                    media_name: [
+                        ...property_images.map(
+                            f => f.originalname
+                        ),
+                        ...geran_docs.map(
+                            f => f.originalname
+                        )
+                    ]
+                }],
+                {
+                    session: dbSession
                 }
-            }),
+            ),
+
+            dealTypeModel.create(
+                [{
+                    name: deal_types
+                }],
+                {
+                    session: dbSession
+                }
+            ),
+
+            featureTagModel.create(
+                [{
+                    tag: tags
+                }],
+                {
+                    session: dbSession
+                }
+            ),
+
+            terrainTypeModel.create(
+                [{
+                    name: terrain_list
+                }],
+                {
+                    session: dbSession
+                }
+            ),
+
+            locationModel.create(
+                [{
+                    location: {
+                        type: "Point",
+                        coordinates: [
+                            parseFloat(longitude),
+                            parseFloat(latitude)
+                        ]
+                    }
+                }],
+                {
+                    session: dbSession
+                }
+            ),
+
             tenure_type === "leasehold"
-                ? leaseholdDetailModel.create({ start_date, end_year })
+                ? leaseholdDetailModel.create(
+                    [{
+                        start_date,
+                        end_year
+                    }],
+                    {
+                        session: dbSession
+                    }
+                )
                 : null,
-            listing_code_generator(),
+
+            listing_code_generator()
         ]);
-        const tenure_doc = await tenureTypeModel.create({
-            type         : tenure_type,
-            leasehold_id : leasehold_doc?._id ?? null,
-        });
-        const listing = await listingModel.create({
-            user_id,
-            state_id        : state_doc._id,
-            tenure_id       : tenure_doc._id,
-            location_id     : location_doc._id,
-            media_id        : [media_doc._id],
-            deal_type_id    : [deal_type_doc._id],
-            feature_tags_id : [feature_tag_doc._id],
-            terrain_id      : [terrain_doc._id],
-            status          : "pending",
-            listing_code    ,
-            public_description,
-            is_malay_reserve_land : is_malay_reserve_land === "true" || is_malay_reserve_land === true,
-            unit,
-            area            : parseFloat(area),
-            price_sqft      : parseFloat(price_sqft),
-            category,
-            relation       ,
-            utilization     ,
-        });
-        const { title , message} =NotificationTemplates.listingSubmitted({
-            listingCode : listing.listing_code,
-            state : state_doc.state,
-            district : district_doc.district,
-            status : "pending"
-        })
-        const io = req.app.get("io");
-        await createAndSendNotification(io,{
-    user_id: listing.user_id,
-    listing_id: listing._id,
-    notifiable_type: "Listing",
-    title,
-    message
-});
+        const tenure_doc =
+            await tenureTypeModel.create(
+                [{
+                    type: tenure_type,
+
+                    leasehold_id:
+                        leasehold_doc?.[0]?._id ?? null
+                }],
+                {
+                    session: dbSession
+                }
+            );
+
+        const listing =
+            await listingModel.create(
+                [{
+                    user_id,
+
+                    state_id:
+                        state_doc[0]._id,
+
+                    tenure_id:
+                        tenure_doc[0]._id,
+
+                    location_id:
+                        location_doc[0]._id,
+
+                    media_id: [
+                        media_doc[0]._id
+                    ],
+
+                    deal_type_id: [
+                        deal_type_doc[0]._id
+                    ],
+
+                    feature_tags_id: [
+                        feature_tag_doc[0]._id
+                    ],
+
+                    terrain_id: [
+                        terrain_doc[0]._id
+                    ],
+
+                    status: "pending",
+
+                    listing_code,
+
+                    public_description,
+
+                    is_malay_reserve_land:
+                        is_malay_reserve_land === "true" ||
+                        is_malay_reserve_land === true,
+
+                    unit,
+
+                    area: parseFloat(area),
+
+                    price_sqft:
+                        parseFloat(price_sqft),
+
+                    category,
+
+                    relation,
+
+                    utilization
+                }],
+                {
+                    session: dbSession
+                }
+            );
+
+
+        await dbSession.commitTransaction();
+
+
+
+        const createdListing = listing[0];
+
+        const {
+            title,
+            message
+        } =
+            NotificationTemplates.listingSubmitted({
+                listingCode:
+                    createdListing.listing_code,
+
+                state:
+                    state_doc[0].state,
+
+                district:
+                    district_doc[0].district,
+
+                status: "pending"
+            });
+
+        const io =
+            req.app.get("io");
+
+        await createAndSendNotification(
+            io,
+            {
+                user_id:
+                    createdListing.user_id,
+
+                listing_id:
+                    createdListing._id,
+
+                notifiable_type:
+                    "Listing",
+
+                title,
+
+                message
+            }
+        );
+
         return res.status(201).json({
             data: {
-                _id          : listing._id,
-                listing_code : listing.listing_code,
-                status       : listing.status,
+                _id:
+                    createdListing._id,
+
+                listing_code:
+                    createdListing.listing_code,
+
+                status:
+                    createdListing.status
             }
         });
 
     } catch (err) {
-          console.error(err);
+
+        if (dbSession.inTransaction()) {
+            await dbSession.abortTransaction();
+        }
+
+        console.error(err);
+
         next(err);
+
+    } finally {
+
+        await dbSession.endSession();
+
     }
 };
 
@@ -1316,215 +1546,23 @@ export const change_listing_status = async (req, res, next) => {
 export const get_single_listing = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const listing = await listingModel.aggregate([
-            {
-                $match: {
-                    _id: new mongoose.Types.ObjectId(id)
-                }
-            },
-            {
-                $lookup: {
-                    from: "users",
-                    localField: "user_id",
-                    foreignField: "_id",
-                    as: "user"
-                }
-            },
-            {
-                $unwind: "$user"
-            },
-            {
-                $lookup: {
-                    from: "states",
-                    localField: "state_id",
-                    foreignField: "_id",
-                    as: "state"
-                }
-            },
-            {
-                $unwind: "$state"
-            },
-            {
-                $lookup: {
-                    from: "districts",
-                    localField: "state_id",
-                    foreignField: "state_id",
-                    as: "district"
-                }
-            },
-            {
-                $unwind: {
-                    path: "$district",
-                    preserveNullAndEmptyArrays: true
-                }
-            },
-            {
-                $lookup: {
-                    from: "subdistricts",
-                    localField: "district._id",
-                    foreignField: "district_id",
-                    as: "sub_district"
-                }
-            },
-            {
-                $unwind: {
-                    path: "$sub_district",
-                    preserveNullAndEmptyArrays: true
-                }
-            },
-            {
-                $lookup: {
-                    from: "locations",
-                    localField: "location_id",
-                    foreignField: "_id",
-                    as: "location"
-                }
-            },
-            {
-                $unwind: "$location"
-            },
-            {
-                $lookup: {
-                    from: "media",
-                    localField: "media_id",
-                    foreignField: "_id",
-                    as: "media"
-                }
-            },
-            {
-                $lookup: {
-                    from: "dealtypes",
-                    localField: "deal_type_id",
-                    foreignField: "_id",
-                    as: "deal_types"
-                }
-            },
-            {
-                $lookup: {
-                    from: "featuretags",
-                    localField: "feature_tags_id",
-                    foreignField: "_id",
-                    as: "feature_tags"
-                }
-            },
-            {
-                $lookup: {
-                    from: "terraintypes",
-                    localField: "terrain_id",
-                    foreignField: "_id",
-                    as: "terrain"
-                }
-            },
-            {
-                $lookup: {
-                    from: "tenuretypes",
-                    localField: "tenure_id",
-                    foreignField: "_id",
-                    as: "tenure"
-                }
-            },
-            {
-                $unwind: "$tenure"
-            },
-            {
-                $lookup: {
-                    from: "leaseholds",
-                    localField: "tenure.leasehold_id",
-                    foreignField: "_id",
-                    as: "leasehold"
-                }
-            },
-            {
-                $unwind: {
-                    path: "$leasehold",
-                    preserveNullAndEmptyArrays: true
-                }
-            },
-            {
-                $addFields: {
-                    total_price: {
-                        $multiply: ["$area", "$price_sqft"]
-                    }
-                }
-            },
-            {
-    $lookup: {
-        from: "listingactivities",
-        localField: "_id",
-        foreignField: "listing_id",
-        as: "activity"
-    }
-},
-{
-    $addFields: {
-        total_views: {
-            $sum: "$activity.view_count"
-        },
-        total_clicks: {
-            $sum: "$activity.click_count"
-        }
-    }
-},
-            {
-                $project: {
-                    _id: 0,
-                    total_views: 1,
-                    total_clicks: 1,
-                    listing_id: "$_id",
-                    listing_code: 1,
-                    status: 1,
-                    unit: 1,
-                    area: 1,
-                    price_sqft: 1,
-                    total_price: 1,
-                    category: 1,
-                    relation: 1,
-                    utilization: 1,
-                    public_description: 1,
-                    is_malay_reserve_land: 1,
-                    createdAt: 1,
-                    updatedAt: 1,
-                    owner: {
-                        user_id: "$user._id",
-                        fullname: "$user.fullname",
-                        email: "$user.email",
-                        phone_number: "$user.phone_number",
-                        role: "$user.role"
-                    },
-                    state: "$state.state",
-                    district: "$district.district",
-                    sub_district: "$sub_district.sub_district",
-                    location: {
-                        longitude: "$location.longitude",
-                        latitude: "$location.latitude",
-                        radius: "$location.radius"
-                    },
-                    media: {
-                        media_url: "$media.media_url",
-                        public_id : "$media.public_id"
-                    },
-                    deal_types: "$deal_types.name",
-                    feature_tags: "$feature_tags.tag",
-                    terrain: "$terrain.name",
-                    tenure: "$tenure.type",
-                    leasehold: {
-                        start_date: "$leasehold.start_date",
-                        end_year: "$leasehold.end_year"
-                    }
-                }
-            }
-        ]);
-        if (!listing.length) {
+
+        const listing = await get_listing_details(id);
+
+        if (!listing) {
             throw new NotFoundError("Listing not found.");
         }
         return res.status(200).json({
             message: "Listing fetched successfully.",
-            listing: listing[0]
+            listing
         });
-    } catch (err) {
-        next(err);
+
+    } catch (error) {
+        next(error);
     }
 };
+
+
 
 // get all listing after zoom out map
 export const get_listing_by_radius = async (req, res, next) => {

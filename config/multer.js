@@ -1,6 +1,6 @@
 import multer from "multer";
 import { BadRequestError } from "../utils/error.utils.js";
-
+import path from "path";
 const IMAGE_TYPES = [
     "image/jpeg",
     "image/png",
@@ -46,11 +46,53 @@ export const upload_profile = profileMulter.single("image");
 export const upload_footer = footerMulter.single("logo");
 
 
-
 const listingMulter = multer({
+
     storage: multer.memoryStorage(),
+
     limits: {
         fileSize: 10 * 1024 * 1024 // 10 MB per file
+    },
+
+    fileFilter: (req, file, cb) => {
+
+        const allowedMimeTypes = [
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "image/gif",
+            "application/pdf",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ];
+
+        const allowedExtensions = [
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".webp",
+            ".gif",
+            ".pdf",
+            ".doc",
+            ".docx"
+        ];
+
+        const extension = path
+            .extname(file.originalname)
+            .toLowerCase();
+
+        if (
+            allowedMimeTypes.includes(file.mimetype) &&
+            allowedExtensions.includes(extension)
+        ) {
+            cb(null, true);
+        } else {
+            cb(
+                new BadRequestError(
+                    "Only image, PDF, and Word files are allowed."
+                )
+            );
+        }
     }
 });
 
@@ -64,8 +106,6 @@ export const upload_listing = listingMulter.fields([
         maxCount: 11
     }
 ]);
-
-
 
 const messageMulter = multer({
     storage: multer.memoryStorage(),

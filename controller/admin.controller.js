@@ -217,7 +217,7 @@ export const get_user_by_admin_profile = async (req, res, next) => {
             .populate({ path: "media_id", select: "media_url media_type media_name" })
             .lean();
 
-        if (!user)                    throw new NotFoundError("User not found");
+        if (!user)throw new NotFoundError("User not found");
 
         const is_admin = ["super_admin", "user_admin", ].includes(user.role);
 

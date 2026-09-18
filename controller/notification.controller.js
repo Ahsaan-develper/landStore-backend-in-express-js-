@@ -87,15 +87,12 @@ export const get_all_notifications = async (req, res, next) => {
 
                             }
                         }
-
                     ],
-
                     totalCount: [
                         {
                             $count: "count"
                         }
                     ]
-
                 }
 
             }
@@ -450,3 +447,25 @@ export const send_notification = (io, user_id, notification) => {
         createdAt:            new Date()
     });
 };
+
+
+export const get_unread_notification_count = async (req, res, next) => {
+
+    try {
+
+        const user_id = req.user.sub;
+
+        const unread_count = await userNotificationModel.countDocuments({
+            user_id,
+            is_read: false
+        });
+
+        return res.status(200).json({
+            success: true,
+            unread_count
+        });
+
+    } catch (err) {
+        next(err);
+    }
+}; 

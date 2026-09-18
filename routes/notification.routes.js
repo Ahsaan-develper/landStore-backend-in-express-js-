@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authorize, verify_token } from "../middleware/jwt.middleware.js";
-import { get_all_notifications, get_notification_data, get_single_notification, mark_all_notifications_as_read } from "../controller/notification.controller.js";
+import { get_all_notifications, get_notification_data, get_single_notification, get_unread_notification_count, mark_all_notifications_as_read } from "../controller/notification.controller.js";
 import { notification_id_validator } from "../middleware/validators/notification.validator.js";
 import { HandleValidationError } from "../middleware/validators/handleValidationError.js";
 
@@ -11,7 +11,10 @@ export const notification_router = Router();
 
 notification_router.get("/" , verify_token , authorize("individual" , "company" , "koperasi")  , get_all_notifications)
 
+// unread notifications 
+notification_router.get("/unread" , verify_token , authorize("individual" , "company" , "koperasi")  , get_unread_notification_count)
 
+// get data 
 notification_router.get("/data/:notification_id" , verify_token , authorize("individual" , "company" , "koperasi") , notification_id_validator , HandleValidationError , get_notification_data)
 
 // marks as read all

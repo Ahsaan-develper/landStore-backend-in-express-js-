@@ -7,5 +7,6 @@ const userNotificationSchema = new mongoose.Schema({
   read_at: { type: Date, default: null },
 }, { timestamps: true });
 userNotificationSchema.index({user_id : 1 , createdAt: -1 } )
+userNotificationSchema.index({user_id : 1 , is_read: 1 } )
 
 export default mongoose.model("UserNotification", userNotificationSchema);

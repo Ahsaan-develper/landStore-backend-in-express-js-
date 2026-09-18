@@ -78,7 +78,7 @@ export const get_user_growth_statistics = async (req, res, next) => {
             await usersModel.aggregate([
                 {
                     $match: {
-                        is_verify: true,
+                
                         role: {
                             $in: [
                                 "individual",

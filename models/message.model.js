@@ -10,4 +10,6 @@ const messageSchema = new mongoose.Schema({
   read_at: { type : Date , default : null},
 }, { timestamps: true });
 messageSchema.index({ sender_id: 1 });
+messageSchema.index({ schedule_id: 1 });
+messageSchema.index({ enquiry_id: 1 });
 export default mongoose.model("Message", messageSchema);

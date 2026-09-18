@@ -519,7 +519,6 @@ export const verify_user_email = async ( req , res  , next)=>{
     }
 }
 
-
 // get user profile data
 export const get_user_profile = async (req, res, next) => {
     try {
@@ -567,7 +566,6 @@ export const get_user_profile = async (req, res, next) => {
                 ...(extra && user.role === "koperasi" && { keporasi_details: extra }),
             }
         });
-
     } catch (err) {
         next(err);
     }
@@ -587,17 +585,14 @@ export const update_user = async (req, res, next) => {
                     select: "public_id media_url media_type media_name"
                 })
                 .lean(),
-
             userDetailModel
                 .findOne({ user_id })
                 .select("_id phone_number")
                 .lean()
         ]);
-
         if (!user) {
             throw new NotFoundError("User not found");
         }
-
         if (!user_detail) {
             throw new NotFoundError("User detail not found");
         }

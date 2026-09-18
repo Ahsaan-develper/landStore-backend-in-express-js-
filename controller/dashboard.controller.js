@@ -43,7 +43,6 @@ export const get_user_growth_statistics = async (req, res, next) => {
                 previousStart.getDate() - 7
             );
 
-
         } else if (period === "30_days") {
 
             currentStart = new Date(now);

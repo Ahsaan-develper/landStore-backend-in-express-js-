@@ -15,7 +15,6 @@ import { createAndSendNotification } from "../services/notification.service.js";
 export const super_admin_register = async (req, res, next) => {
     try {
         const { fullname, email, password } = req.body;
-
         const existing_user = await usersModel
             .findOne({ email })
             .select("_id status")
@@ -23,7 +22,6 @@ export const super_admin_register = async (req, res, next) => {
         
         if (existing_user) {
             const existing_admin = await adminModel.findOne({ user_id: existing_user._id }).select("_id admin_role").lean();
-            
             if( existing_admin?.admin_role === "super_admin") throw new ConflictError(" Super admin already create with this email ");
             const admin = await adminModel.create({
                 user_id    : existing_user._id,
@@ -39,7 +37,6 @@ export const super_admin_register = async (req, res, next) => {
             });
         }
 
-        
         const [hashed_password, user_id, user_code] = await Promise.all([
             bcrypt.hash(password, 10),
             Promise.resolve(new mongoose.Types.ObjectId()),

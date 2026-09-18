@@ -49,19 +49,19 @@ export const user_register = async (req, res, next) => {
                     }
                 );
             }
-            if (existing_user.is_verify === false) {
-                await request_email_verification({
-                    userId: existing_user._id,
-                    userEmail: existing_user.email,
-                    userName: existing_user.fullname
-                });
-                return res.status(200).json({
-                    data: {
-                        message:
-                            "Your email is not verified. A new verification link has been sent to your email."
-                    }
-                });
-            }
+            // if (existing_user.is_verify === false) {
+            //     await request_email_verification({
+            //         userId: existing_user._id,
+            //         userEmail: existing_user.email,
+            //         userName: existing_user.fullname
+            //     });
+            //     return res.status(200).json({
+            //         data: {
+            //             message:
+            //                 "Your email is not verified. A new verification link has been sent to your email."
+            //         }
+            //     });
+            // }
             return res.status(200).json({
                 data: {
                     message:
@@ -116,11 +116,11 @@ export const user_register = async (req, res, next) => {
             user[0]._id
         );
         // Send verification email
-        await request_email_verification({
-            userId: user[0]._id,
-            userEmail: user[0].email,
-            userName: user[0].fullname
-        });
+        // await request_email_verification({
+        //     userId: user[0]._id,
+        //     userEmail: user[0].email,
+        //     userName: user[0].fullname
+        // });
         return res.status(201).json({
             data: {
                 _id: user[0]._id,
@@ -200,19 +200,19 @@ export const keporasi_register = async (req, res, next) => {
                     { $set: { status: "active" } }
                 );
             }
-            if (existing_user.is_verify === false) {
-                await request_email_verification({
-                    userId: existing_user._id,
-                    userEmail: existing_user.email,
-                    userName: existing_user.fullname
-                });
-                return res.status(200).json({
-                    data: {
-                        message:
-                            "Your email is not verified. A new verification link has been sent to your email."
-                    }
-                });
-            }
+            // if (existing_user.is_verify === false) {
+            //     // await request_email_verification({
+            //     //     userId: existing_user._id,
+            //     //     userEmail: existing_user.email,
+            //     //     userName: existing_user.fullname
+            //     // });
+            //     return res.status(200).json({
+            //         data: {
+            //             message:
+            //                 "Your email is not verified. A new verification link has been sent to your email."
+            //         }
+            //     });
+            // }
             return res.status(200).json({
                 data: {
                     message: "User account has been reactivated."
@@ -256,11 +256,11 @@ export const keporasi_register = async (req, res, next) => {
             );
         });
         await linkVisitorToUser(req, user_id);
-        await request_email_verification({
-            userId: user_id,
-            userEmail: email,
-            userName: fullname
-        });
+        // await request_email_verification({
+        //     userId: user_id,
+        //     userEmail: email,
+        //     userName: fullname
+        // });
         return res.status(201).json({
             data: {
                 _id: user_id,
@@ -327,8 +327,13 @@ export const company_register = async (req, res, next) => {
             if (existing_user.status === "suspended") {
                 throw new ForbiddenError("Your account has been suspended. Contact support.");
             }
-            if (existing_user.status === "active" && existing_user.is_verify === true) {
-                throw new ConflictError("User email already registered");
+            if (
+                existing_user.status === "active" &&
+                existing_user.is_verify === true
+            ) {
+                throw new ConflictError(
+                    "User email already registered"
+                );
             }
             if (existing_user.status === "inactive") {
                 await usersModel.findByIdAndUpdate(
@@ -337,18 +342,19 @@ export const company_register = async (req, res, next) => {
                 );
             }
 
-            if (existing_user.is_verify === false) {
-                await request_email_verification({
-                    userId: existing_user._id,
-                    userEmail: existing_user.email,
-                    userName: existing_user.fullname
-                });
-                return res.status(200).json({
-                    data: {
-                        message: "Your email is not verified. A new verification link has been sent to your email."
-                    }
-                });
-            }
+            // if (existing_user.is_verify === false) {
+            //     await request_email_verification({
+            //         userId: existing_user._id,
+            //         userEmail: existing_user.email,
+            //         userName: existing_user.fullname
+            //     });
+            //     return res.status(200).json({
+            //         data: {
+            //             message: "Your email is not verified. A new verification link has been sent to your email."
+            //         }
+            //     });
+            // }
+            if ( existing_user.status === "active" && existing_user.is_verify === false )  throw new ConflictError("User email already registered but not verified.");
 
             return res.status(200).json({
                 data: { message: "User account has been reactivated." }
@@ -361,41 +367,54 @@ export const company_register = async (req, res, next) => {
             Promise.resolve(new mongoose.Types.ObjectId())
         ]);
 
-        session.startTransaction();
-        const [user, company] = await Promise.all([
-            usersModel.create(
-                [
-                    {
-                        _id: user_id,
-                        fullname,
-                        email,
-                        password: hashed_password,
-                        status: "active",
-                        is_verify: false,
-                        role: "company",
-                        user_code
-                    }
-                ],
-                { session }
-            ),
-            companyDetailsModel.create(
-                [{ user_id, company_name, SSM_reg_number }],
-                { session }
-            ),
-            userDetailModel.create(
-                [{ user_id, phone_number }],
-                { session }
-            )
-        ]);
-        await session.commitTransaction();
+session.startTransaction();
+
+const user = await usersModel.create(
+    [
+        {
+            _id: user_id,
+            fullname,
+            email,
+            password: hashed_password,
+            status: "active",
+            is_verify: false,
+            role: "company",
+            user_code
+        }
+    ],
+    { session }
+);
+
+const company = await companyDetailsModel.create(
+    [
+        {
+            user_id,
+            company_name,
+            SSM_reg_number
+        }
+    ],
+    { session }
+);
+
+await userDetailModel.create(
+    [
+        {
+            user_id,
+            phone_number
+        }
+    ],
+    { session }
+);
+
+await session.commitTransaction();
 
         await linkVisitorToUser(req, user[0]._id);
 
-        await request_email_verification({
-            userId: user[0]._id,
-            userEmail: user[0].email,
-            userName: user[0].fullname
-        });
+        // await request_email_verification({
+        //     userId: user[0]._id,
+        //     userEmail: user[0].email,
+        //     userName: user[0].fullname
+        // });
 
         return res.status(201).json({
             data: {
@@ -410,7 +429,10 @@ export const company_register = async (req, res, next) => {
             }
         });
     } catch (err) {
-       if (err.code === 11000) {
+
+  if (session.inTransaction()) {
+        await session.abortTransaction();
+    }       if (err.code === 11000) {
 
         if (err.keyPattern?.IC) {
             return next(new ConflictError("This IC already exists"));
@@ -438,7 +460,9 @@ export const company_register = async (req, res, next) => {
 } finally {
     await session.endSession();
 }
-};// login a user 
+};
+
+// login a user 
 export const user_login = async (req, res, next) => {
     try {
         const { email, password } = req.body;

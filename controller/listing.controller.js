@@ -18,6 +18,7 @@ import { createAndSendNotification } from "../services/notification.service.js";
 import enquiryModel from "../models/enquiry.model.js";
 import notesModel from "../models/notes.model.js";
 import { get_listing_details } from "../utils/dbhelper.utils.js";
+import { sendListingStatusEmail } from "../services/resend.service.js";
 
 export const create_listing = async (req, res, next) => {
     const dbSession = await mongoose.startSession();
@@ -446,6 +447,7 @@ export const make_draft_by_user = async (req, res, next) => {
 
         const deal_types = Array.isArray(dealType) ? dealType : [dealType];
         const tags = Array.isArray(feature_tags) ? feature_tags : [feature_tags];
+        const terrain_list = Array.isArray(terrain) ? terrain : [terrain];
    
         dbSession.startTransaction();
 
@@ -1520,6 +1522,16 @@ export const change_listing_status = async (req, res, next) => {
             oldStatus : oldStatus,
             newStatus : status
         });
+
+          await sendListingStatusEmail({
+                    userEmail: listing.user_id.email,
+                    userName: listing.user_id.fullname,
+                    listingCode: listing.listing_code,
+                    listingTitle: listing.title,
+                    status: listing.status,
+                    reason
+                });
+
         const io = req.app.get("io");
         await createAndSendNotification(io,{
     user_id: listing.user_id,

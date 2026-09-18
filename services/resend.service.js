@@ -1,6 +1,6 @@
 import { _config } from "../config/envConfig.js";
 import resend from "../config/resend.js";
-import { passwordResetTemplate} from "../template/email.template.js";
+import { listingStatusTemplate, passwordResetTemplate} from "../template/email.template.js";
 
 export const sendPasswordResetEmail = async ({
     userEmail,
@@ -87,6 +87,49 @@ export const sendVerificationEmail = async ({
             "Verification email error:",
             error
         );
+
+        throw error;
+    }
+};
+
+
+export const sendListingStatusEmail = async ({
+    userEmail,
+    userName,
+    listingCode,
+    listingTitle,
+    status,
+    reason = null
+}) => {
+
+    try {
+
+        const html = listingStatusTemplate({
+            userName,
+            listingCode,
+            listingTitle,
+            status,
+            reason,
+            appName: _config.EMAIL_APP_NAME
+        });
+
+        const { data, error } = await resend.emails.send({
+            from: _config.SENDING_EMAIL,
+            to: userEmail,
+            subject: `Listing status updated - ${status}`,
+            html
+        });
+
+        if (error) {
+            console.error("Resend error:", error);
+            throw new Error("Failed to send listing status email");
+        }
+
+        return data;
+
+    } catch (error) {
+
+        console.error("Listing status email error:", error);
 
         throw error;
     }

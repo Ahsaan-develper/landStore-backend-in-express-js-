@@ -359,6 +359,9 @@ export const change_user_status_by_admin = async (req, res, next) => {
         if (!user) {
             throw new NotFoundError("User not found.");
         }
+
+        
+
         let template;
         if (status === "suspended") {
             template = NotificationTemplates.accountSuspended();

@@ -35,6 +35,23 @@ export const user_register_validator = [
     .bail()
 ]
 
+export const password_validator = [
+    
+
+    body("password")
+    .trim()
+    .notEmpty()
+    .withMessage("Please enter your password")
+    .bail()
+    .isLength({ min: 8, max: 20 })
+    .withMessage("Password must be between 8 and 20 characters")
+    .bail()
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*(),.?":{}|<>])(?=.*\d).{8,20}$/)
+    .withMessage(
+        "Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character"
+    )
+    .bail()
+]
 
 export const user_detail_validator = [
     body("phone_number")

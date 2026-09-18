@@ -614,6 +614,8 @@ export const update_user = async (req, res, next) => {
                 .select("_id phone_number")
                 .lean()
         ]);
+        if ( user_detail && user_detail.phone_number === phone_number )  throw new ConflictError("The new phone number is the same as the current one.");
+
         if (!user) {
             throw new NotFoundError("User not found");
         }
@@ -684,8 +686,8 @@ export const update_user = async (req, res, next) => {
 
 export const delete_user = async (req, res, next) => {
     try {
-        const { user_id } = req.params;
-    
+        const user_id = req.user.sub;
+
         const user = await usersModel
             .findById(user_id)
             .select('_id media_id refresh_token')

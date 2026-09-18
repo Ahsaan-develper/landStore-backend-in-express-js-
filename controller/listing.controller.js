@@ -1527,9 +1527,7 @@ export const change_listing_status = async (req, res, next) => {
                     userEmail: listing.user_id.email,
                     userName: listing.user_id.fullname,
                     listingCode: listing.listing_code,
-                    listingTitle: listing.title,
                     status: listing.status,
-                    reason
                 });
 
         const io = req.app.get("io");

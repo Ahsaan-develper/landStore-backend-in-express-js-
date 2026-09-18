@@ -97,9 +97,7 @@ export const sendListingStatusEmail = async ({
     userEmail,
     userName,
     listingCode,
-    listingTitle,
     status,
-    reason = null
 }) => {
 
     try {
@@ -107,9 +105,7 @@ export const sendListingStatusEmail = async ({
         const html = listingStatusTemplate({
             userName,
             listingCode,
-            listingTitle,
             status,
-            reason,
             appName: _config.EMAIL_APP_NAME
         });
 
